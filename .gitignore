@@ -1,0 +1,48 @@
+# Build directories
+build/
+build-*/
+out/
+cmake-build-*/
+.appdata/
+.dotnet-home/
+.nuget-packages/
+.codex-tmp-*/
+
+# IDE
+.vs/
+.claude/settings.local.json
+*.user
+*.suo
+*.sln.docstates
+.idea/
+*.swp
+*~
+
+# CMake generated
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+
+# Compiled
+**/bin/
+**/obj/
+*.obj
+*.o
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# vcpkg
+vcpkg_installed/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log

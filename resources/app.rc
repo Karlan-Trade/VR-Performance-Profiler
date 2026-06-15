@@ -1,0 +1,32 @@
+// VR Performance Profiler - Resource file
+#include <windows.h>
+
+// Version information
+1 VERSIONINFO
+FILEVERSION     0,1,0,0
+PRODUCTVERSION  0,1,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0x0L
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "VR Performance Profiler"
+            VALUE "FileDescription",  "VR Performance Monitor Overlay"
+            VALUE "FileVersion",      "0.1.0"
+            VALUE "InternalName",     "vr_perf_profiler"
+            VALUE "LegalCopyright",    ""
+            VALUE "OriginalFilename", "vr_perf_profiler.exe"
+            VALUE "ProductName",      "VR Performance Profiler"
+            VALUE "ProductVersion",   "0.1.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 0x04B0
+    END
+END
