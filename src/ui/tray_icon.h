@@ -9,6 +9,7 @@ namespace vrperf {
 enum TrayMenuID {
     TRAY_MENU_TOGGLE_VIS = 1001,
     TRAY_MENU_SWITCH_MODE,
+    TRAY_MENU_CONNECT_VR,
     TRAY_MENU_SETTINGS,
     TRAY_MENU_EXIT
 };

@@ -18,6 +18,7 @@ struct OverlayConfig {
     float alpha = 0.85f;
     int updateIntervalMs = 66;        // ~15fps
     bool visibleOnStart = true;
+    bool autoConnectVr = false;
 };
 
 struct HudConfig {

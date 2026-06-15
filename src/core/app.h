@@ -48,7 +48,6 @@ private:
     HWND hwnd_ = nullptr;
     UINT_PTR timerId_ = 1;
     static constexpr UINT WM_TRAYICON = WM_APP + 1;
-    static constexpr DWORD OVERLAY_RETRY_INTERVAL_MS = 3000;
 
     // Hotkey IDs
     static constexpr int HOTKEY_TOGGLE_VIS = 1;

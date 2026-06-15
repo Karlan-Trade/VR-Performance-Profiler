@@ -58,6 +58,8 @@ void TrayIcon::ShowMenu(HWND hwnd, int x, int y)
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
 
+    AppendMenu(hMenu, MF_STRING, TRAY_MENU_CONNECT_VR, L"Connect SteamVR Overlay");
+    AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenu(hMenu, MF_STRING, TRAY_MENU_TOGGLE_VIS, L"Toggle Overlay Visibility");
     AppendMenu(hMenu, MF_STRING, TRAY_MENU_SWITCH_MODE, L"Switch Mode (HUD/Wrist)");
     AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);

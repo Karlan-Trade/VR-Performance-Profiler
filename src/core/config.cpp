@@ -55,6 +55,7 @@ void Config::FromJson(const nlohmann::json& j)
         overlay.alpha            = o.value("alpha", overlay.alpha);
         overlay.updateIntervalMs = o.value("update_interval_ms", overlay.updateIntervalMs);
         overlay.visibleOnStart   = o.value("visible_on_start", overlay.visibleOnStart);
+        overlay.autoConnectVr    = o.value("auto_connect_vr", overlay.autoConnectVr);
     }
 
     // HUD
@@ -127,7 +128,8 @@ nlohmann::json Config::ToJson() const
         {"width_meters", overlay.widthMeters},
         {"alpha", overlay.alpha},
         {"update_interval_ms", overlay.updateIntervalMs},
-        {"visible_on_start", overlay.visibleOnStart}
+        {"visible_on_start", overlay.visibleOnStart},
+        {"auto_connect_vr", overlay.autoConnectVr}
     };
 
     // HUD

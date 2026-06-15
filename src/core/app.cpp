@@ -70,7 +70,9 @@ bool App::Initialize()
     }
 
     TryStartSensorBridge();
-    TryInitializeOverlay();
+    if (config_.overlay.autoConnectVr) {
+        TryInitializeOverlay();
+    }
     UpdateTrayTooltip();
 
     // Register hotkeys
@@ -150,6 +152,10 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             overlayPositioner_.ToggleMode();
             ApplyOverlayTransform();
             return 0;
+        case TRAY_MENU_CONNECT_VR:
+            TryInitializeOverlay();
+            UpdateTrayTooltip();
+            return 0;
         case TRAY_MENU_SETTINGS:
             OpenSettings();
             return 0;
@@ -173,15 +179,6 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 void App::OnTimer()
 {
-    if (!overlayManager_.IsInitialized()) {
-        const DWORD now = GetTickCount();
-        if (lastOverlayRetryMs_ == 0 ||
-            now - lastOverlayRetryMs_ >= OVERLAY_RETRY_INTERVAL_MS) {
-            TryInitializeOverlay();
-            UpdateTrayTooltip();
-        }
-    }
-
     if (overlayManager_.IsInitialized()) {
         // Poll OpenVR events
         overlayManager_.PollEvents();
@@ -348,7 +345,7 @@ void App::UpdateTrayTooltip()
     if (overlayManager_.IsInitialized()) {
         trayIcon_.UpdateTooltip(L"VR Performance Profiler - SteamVR connected");
     } else {
-        trayIcon_.UpdateTooltip(L"VR Performance Profiler - SteamVR not connected");
+        trayIcon_.UpdateTooltip(L"VR Performance Profiler - overlay disconnected");
     }
 }
 

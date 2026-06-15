@@ -20,6 +20,7 @@ int main()
         assert(config.overlay.mode == "hud");
         assert(config.overlay.widthMeters == 0.3f);
         assert(config.overlay.alpha == 0.85f);
+        assert(config.overlay.autoConnectVr == false);
         assert(config.hud.pitchDegrees == -15.0f);
         assert(config.wrist.hand == "left");
         assert(config.metrics.size() == 8);

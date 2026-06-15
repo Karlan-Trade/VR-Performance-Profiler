@@ -47,6 +47,11 @@ cmake --build . --config Release
 2. Optional: start HWiNFO64 with shared memory enabled for extra sensors
 3. Run `vr_perf_profiler.exe`
 
+The app does not connect to SteamVR automatically by default. It starts in the
+system tray and keeps hardware monitoring active. Use the tray menu item
+`Connect SteamVR Overlay` when SteamVR is already running and you want the VR
+overlay to appear.
+
 ## Configuration
 
 The application stores its configuration in `%APPDATA%/VRPerfProfiler/config.json`.
@@ -60,6 +65,11 @@ The application stores its configuration in `%APPDATA%/VRPerfProfiler/config.jso
 
 - `Ctrl+Shift+H` — Toggle overlay visibility
 - `Ctrl+Shift+M` — Switch between HUD and Wrist mode
+
+Tray menu:
+
+- `Connect SteamVR Overlay` — Initialize the OpenVR overlay on demand
+- `Settings...` — Open the configuration dialog without requiring SteamVR
 
 ## Architecture
 
