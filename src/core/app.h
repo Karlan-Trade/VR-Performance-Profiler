@@ -35,6 +35,7 @@ private:
     void OnHotkey(int id);
 
     // Update cycle
+    std::vector<SensorReading> CollectSensorReadings();
     void UpdateOverlay();
     void ApplyOverlayTransform();
     bool TryInitializeOverlay();

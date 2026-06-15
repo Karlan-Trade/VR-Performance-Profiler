@@ -81,6 +81,7 @@ bool App::Initialize()
 
     // Start update timer
     SetTimer(hwnd_, timerId_, config_.overlay.updateIntervalMs, nullptr);
+    PostMessage(hwnd_, WM_COMMAND, TRAY_MENU_SETTINGS, 0);
 
     running_ = true;
     return true;
@@ -315,7 +316,9 @@ std::wstring App::GetExecutableDirectory()
 
 void App::OpenSettings()
 {
-    if (!settingsWindow_.Show(hwnd_, config_)) {
+    if (!settingsWindow_.Show(hwnd_, config_, [this]() {
+            return CollectSensorReadings();
+        })) {
         return;
     }
 
@@ -333,6 +336,8 @@ void App::OpenSettings()
         ApplyOverlayTransform();
     }
 
+    KillTimer(hwnd_, timerId_);
+    SetTimer(hwnd_, timerId_, config_.overlay.updateIntervalMs, nullptr);
     UpdateTrayTooltip();
 }
 
@@ -351,6 +356,24 @@ void App::UpdateTrayTooltip()
 
 void App::UpdateOverlay()
 {
+    auto readings = CollectSensorReadings();
+    auto frameTiming = openVrFrameTiming_.Read();
+
+    // Render to D3D11 texture
+    d2dRenderer_.BeginDraw();
+    d2dRenderer_.DrawSensorPanel(
+        readings,
+        config_,
+        frameTiming.available ? frameTiming.gpuFrameTimeMs : 0.0,
+        frameTiming.droppedFrames);
+    d2dRenderer_.EndDraw();
+
+    // Submit texture to OpenVR
+    overlayManager_.SetTexture(d3d11Renderer_.GetSRV());
+}
+
+std::vector<SensorReading> App::CollectSensorReadings()
+{
     metricAggregator_.Clear();
 
     if (libreHardwareMonitorBridgeProvider_.Refresh()) {
@@ -367,20 +390,7 @@ void App::UpdateOverlay()
     windowsFallbackProvider_.Refresh();
     metricAggregator_.AddReadings(windowsFallbackProvider_.GetReadings());
 
-    auto readings = metricAggregator_.GetReadings();
-    auto frameTiming = openVrFrameTiming_.Read();
-
-    // Render to D3D11 texture
-    d2dRenderer_.BeginDraw();
-    d2dRenderer_.DrawSensorPanel(
-        readings,
-        config_,
-        frameTiming.available ? frameTiming.gpuFrameTimeMs : 0.0,
-        frameTiming.droppedFrames);
-    d2dRenderer_.EndDraw();
-
-    // Submit texture to OpenVR
-    overlayManager_.SetTexture(d3d11Renderer_.GetSRV());
+    return metricAggregator_.GetReadings();
 }
 
 } // namespace vrperf

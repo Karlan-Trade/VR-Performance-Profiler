@@ -48,13 +48,15 @@ cmake --build . --config Release
 3. Run `vr_perf_profiler.exe`
 
 The app does not connect to SteamVR automatically by default. It starts in the
-system tray and keeps hardware monitoring active. Use the tray menu item
-`Connect SteamVR Overlay` when SteamVR is already running and you want the VR
-overlay to appear.
+system tray, opens the settings window, and keeps hardware monitoring active.
+Use the tray menu item `Connect SteamVR Overlay` when SteamVR is already running
+and you want the VR overlay to appear.
 
 ## Configuration
 
 The application stores its configuration in `%APPDATA%/VRPerfProfiler/config.json`.
+The settings window shows live sensor readings, lets you choose the UI language
+between Chinese and English, and controls the data refresh interval.
 
 ### Overlay Modes
 

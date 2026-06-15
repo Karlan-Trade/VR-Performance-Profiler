@@ -54,6 +54,7 @@ struct HotkeyConfig {
 struct GeneralConfig {
     bool startMinimized = true;
     bool autoStartHwinfoCheck = true;
+    std::string language = "zh";
     std::string logLevel = "info";
 };
 

@@ -25,6 +25,7 @@ int main()
         assert(config.wrist.hand == "left");
         assert(config.metrics.size() == 8);
         assert(config.appearance.theme == "dark");
+        assert(config.general.language == "zh");
 
         std::cout << "[PASS] Default values correct" << std::endl;
     }
@@ -37,7 +38,9 @@ int main()
         // Modify some values
         config.overlay.mode = "wrist";
         config.overlay.alpha = 0.9f;
+        config.overlay.updateIntervalMs = 1000;
         config.appearance.theme = "light";
+        config.general.language = "en";
 
         // Disable a metric
         for (auto& m : config.metrics) {
@@ -54,7 +57,9 @@ int main()
 
         assert(config2.overlay.mode == "wrist");
         assert(config2.overlay.alpha == 0.9f);
+        assert(config2.overlay.updateIntervalMs == 1000);
         assert(config2.appearance.theme == "light");
+        assert(config2.general.language == "en");
 
         for (const auto& m : config2.metrics) {
             if (m.category == "gpu_clock") {

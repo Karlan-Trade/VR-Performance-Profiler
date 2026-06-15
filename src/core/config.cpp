@@ -113,6 +113,7 @@ void Config::FromJson(const nlohmann::json& j)
         auto& g = j["general"];
         general.startMinimized      = g.value("start_minimized", general.startMinimized);
         general.autoStartHwinfoCheck = g.value("auto_start_hwinfo_check", general.autoStartHwinfoCheck);
+        general.language            = g.value("language", general.language);
         general.logLevel            = g.value("log_level", general.logLevel);
     }
 }
@@ -180,6 +181,7 @@ nlohmann::json Config::ToJson() const
     j["general"] = {
         {"start_minimized", general.startMinimized},
         {"auto_start_hwinfo_check", general.autoStartHwinfoCheck},
+        {"language", general.language},
         {"log_level", general.logLevel}
     };
 
