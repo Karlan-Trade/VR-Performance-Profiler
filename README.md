@@ -10,10 +10,19 @@ VR Performance Profiler 是一个独立的 SteamVR/OpenVR 覆盖层性能监控�
 - VR 帧数监控：FPS、帧间隔、GPU 帧时间、头显刷新率、丢帧数
 - SteamVR 覆盖层：支持 HUD 视角固定模式和手腕模式
 - MSI Afterburner 优先数据源：可读取硬件监控共享内存
-- 内置温度桥接工具：通过 LibreHardwareMonitor 读取 CPU/GPU 温度
+- 内置温度桥接工具：通过 LibreHardwareMonitor 读取 CPU/GPU 温度，并保留设备名便于区分多 GPU 读数
 - 可选 HWiNFO64 集成：启用共享内存后可读取更多传感器
-- 可配置显示项：设置界面中按传感器行勾选要显示的数据
+- 可配置显示项：设置界面中按传感器行勾选要显示的数据，可调 HUD 面板大小
+- 显示优化：温度以正确的 `°C` 符号显示，HUD 显示范围与覆盖层范围一致，手腕界面默认更紧凑
+- 设置界面主题：深浅主题会同步更新 Web 设置窗口内容和标题栏颜色
 - 单实例运行：重复启动会直接退出，避免多个托盘/桥接进程并存
+
+## v0.1.1 更新
+
+- 修复温度单位符号显示异常，覆盖层和相关传感器值统一显示为 `°C`
+- 修复设置窗口标题栏不跟随深色/浅色主题切换的问题
+- 修复 HUD 实际可见区域小于 SteamVR 覆盖层范围的问题
+- 新增 HUD 面板大小滑块，默认 HUD 距离更近，手腕模式默认尺寸更小
 
 ## 运行要求
 
@@ -78,6 +87,7 @@ VRPerformanceProfiler-<version>-portable.zip
 3. 可选：启动 HWiNFO64 并开启 Shared Memory
 4. 运行 `vr_perf_profiler.exe`
 5. 在设置窗口中勾选要显示的传感器和 VR 帧数指标
+6. 可按需要调整主题、更新间隔、HUD 面板大小，并在 HUD/手腕模式之间切换
 
 程序会在系统托盘运行。托盘菜单提供：
 
@@ -89,6 +99,12 @@ VRPerformanceProfiler-<version>-portable.zip
 
 - `Ctrl+Shift+H`：显示/隐藏覆盖层
 - `Ctrl+Shift+M`：切换 HUD/手腕模式
+
+## 覆盖层显示
+
+- HUD 模式固定在头显视野中，默认距离为 `1.0 m`
+- HUD 面板大小可在 Web 设置界面中通过滑块调整，范围为 `0.50 m` 到 `2.50 m`
+- 手腕模式附着在控制器上，默认宽度为 `0.75 m`
 
 ## 帧数检测说明
 

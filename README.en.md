@@ -10,10 +10,19 @@ A SteamVR overlay application that displays real-time system hardware monitoring
 - **VR frame-rate monitoring** — FPS, frame interval, GPU frame time, headset refresh rate, and dropped frames from SteamVR compositor timing
 - **SteamVR overlay** — Displayed as a HUD (head-locked) or wrist-mounted overlay
 - **Default MSI Afterburner source** — Uses MSI Afterburner's hardware monitoring shared memory when available
-- **Default temperature bridge** — Can read CPU/GPU temperatures from a LibreHardwareMonitor-compatible JSON bridge
+- **Default temperature bridge** — Can read CPU/GPU temperatures from a LibreHardwareMonitor-compatible JSON bridge and preserve device names for multi-GPU selection
 - **Optional HWiNFO64 integration** — Reads extra sensor data from HWiNFO's shared memory interface when available
-- **Customizable** — Choose which metrics to display, overlay position, theme, and more
+- **Customizable** — Choose exact sensor rows, overlay mode, HUD panel size, theme, and update interval
+- **Display polish** — Temperature values use the correct `°C` symbol, the HUD fills its SteamVR overlay bounds, and wrist mode defaults to a more compact size
+- **Theme-aware settings window** — The Web settings content and native title bar follow the selected light/dark theme
 - **Lightweight** — Minimal performance overhead, runs alongside VR games
+
+## v0.1.1 Update
+
+- Fixed incorrect temperature unit symbols so overlay readings consistently show `°C`
+- Fixed the Web settings window title bar so it follows the selected light/dark theme
+- Fixed the HUD panel so its visible bounds match the SteamVR overlay bounds
+- Added a HUD panel size slider, moved the default HUD distance closer, and made wrist mode smaller by default
 
 ## Requirements
 
@@ -108,6 +117,10 @@ so multi-GPU systems can choose GPU1/GPU2 readings independently.
 
 - **HUD Mode** — Fixed in your field of view, like a car dashboard
 - **Wrist Mode** — Attached to your controller, like a virtual watch
+
+HUD mode defaults to `1.0 m` in front of the headset. The Web settings window
+includes a HUD panel size slider from `0.50 m` to `2.50 m`. Wrist mode defaults
+to a compact `0.75 m` overlay width.
 
 ### Hotkeys
 
