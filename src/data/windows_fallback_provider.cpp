@@ -24,6 +24,7 @@ bool WindowsFallbackProvider::Refresh()
             if (total > 0) {
                 SensorReading cpu;
                 cpu.category = SensorCategory::CpuLoad;
+                cpu.source = "Windows";
                 cpu.label = "CPU Load";
                 cpu.value = 100.0 * static_cast<double>(total - idle) /
                             static_cast<double>(total);
@@ -43,6 +44,7 @@ bool WindowsFallbackProvider::Refresh()
     if (GlobalMemoryStatusEx(&mem)) {
         SensorReading ram;
         ram.category = SensorCategory::RamUsage;
+        ram.source = "Windows";
         ram.label = "RAM";
         ram.value = static_cast<double>(mem.dwMemoryLoad);
         ram.unit = "%";

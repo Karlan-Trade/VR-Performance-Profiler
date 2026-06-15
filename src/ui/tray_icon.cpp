@@ -53,19 +53,26 @@ void TrayIcon::UpdateTooltip(const std::wstring& text)
     Shell_NotifyIcon(NIM_MODIFY, &nid_);
 }
 
-void TrayIcon::ShowMenu(HWND hwnd, int x, int y)
+void TrayIcon::ShowMenu(HWND hwnd, int x, int y, const std::string& language)
 {
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
 
-    AppendMenu(hMenu, MF_STRING, TRAY_MENU_CONNECT_VR, L"Connect SteamVR Overlay");
+    const bool english = language == "en";
+
+    AppendMenu(hMenu, MF_STRING, TRAY_MENU_CONNECT_VR,
+               english ? L"Connect SteamVR Overlay" : L"\u8FDE\u63A5 SteamVR \u8986\u76D6");
     AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenu(hMenu, MF_STRING, TRAY_MENU_TOGGLE_VIS, L"Toggle Overlay Visibility");
-    AppendMenu(hMenu, MF_STRING, TRAY_MENU_SWITCH_MODE, L"Switch Mode (HUD/Wrist)");
+    AppendMenu(hMenu, MF_STRING, TRAY_MENU_TOGGLE_VIS,
+               english ? L"Toggle Overlay Visibility" : L"\u5207\u6362\u8986\u76D6\u663E\u793A");
+    AppendMenu(hMenu, MF_STRING, TRAY_MENU_SWITCH_MODE,
+               english ? L"Switch Mode (HUD/Wrist)" : L"\u5207\u6362\u6A21\u5F0F\uFF08HUD/\u624B\u8155\uFF09");
     AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenu(hMenu, MF_STRING, TRAY_MENU_SETTINGS, L"Settings...");
+    AppendMenu(hMenu, MF_STRING, TRAY_MENU_SETTINGS,
+               english ? L"Settings..." : L"\u8BBE\u7F6E...");
     AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenu(hMenu, MF_STRING, TRAY_MENU_EXIT, L"Exit");
+    AppendMenu(hMenu, MF_STRING, TRAY_MENU_EXIT,
+               english ? L"Exit" : L"\u9000\u51FA");
 
     // Required to make menu disappear when clicking outside
     SetForegroundWindow(hwnd);

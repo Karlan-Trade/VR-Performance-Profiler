@@ -7,6 +7,84 @@ namespace vrperf {
 
 namespace fs = std::filesystem;
 
+namespace {
+
+std::wstring ToWideForJson(const std::string& text)
+{
+    if (text.empty()) {
+        return {};
+    }
+
+    int length = MultiByteToWideChar(
+        CP_UTF8,
+        MB_ERR_INVALID_CHARS,
+        text.c_str(),
+        static_cast<int>(text.size()),
+        nullptr,
+        0);
+    UINT codePage = CP_UTF8;
+    DWORD flags = MB_ERR_INVALID_CHARS;
+    if (length <= 0) {
+        codePage = CP_ACP;
+        flags = 0;
+        length = MultiByteToWideChar(
+            codePage,
+            flags,
+            text.c_str(),
+            static_cast<int>(text.size()),
+            nullptr,
+            0);
+    }
+    if (length <= 0) {
+        return std::wstring(text.begin(), text.end());
+    }
+
+    std::wstring wide(static_cast<size_t>(length), L'\0');
+    MultiByteToWideChar(
+        codePage,
+        flags,
+        text.c_str(),
+        static_cast<int>(text.size()),
+        wide.data(),
+        length);
+    return wide;
+}
+
+std::string SafeUtf8ForJson(const std::string& text)
+{
+    const auto wide = ToWideForJson(text);
+    if (wide.empty()) {
+        return {};
+    }
+
+    int length = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wide.c_str(),
+        static_cast<int>(wide.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+    if (length <= 0) {
+        return {};
+    }
+
+    std::string utf8(static_cast<size_t>(length), '\0');
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wide.c_str(),
+        static_cast<int>(wide.size()),
+        utf8.data(),
+        length,
+        nullptr,
+        nullptr);
+    return utf8;
+}
+
+} // namespace
+
 std::string Config::GetDefaultPath()
 {
     char appdata[MAX_PATH];
@@ -21,7 +99,7 @@ std::string Config::GetDefaultPath()
 
 void Config::SetDefaults()
 {
-    version = 1;
+    version = 4;
     overlay = OverlayConfig{};
     hud = HudConfig{};
     wrist = WristConfig{};
@@ -35,6 +113,11 @@ void Config::SetDefaults()
         {"gpu_memory", true,  "VRAM"},
         {"ram_usage",  true,  "RAM"},
         {"gpu_fan",    false, "GPU Fan"},
+        {"vr_fps",     true,  "VR FPS"},
+        {"vr_frame_time", false, "VR Frame"},
+        {"vr_gpu_frame_time", false, "VR GPU"},
+        {"vr_refresh_rate", false, "VR Refresh"},
+        {"vr_dropped_frames", true, "VR Drops"},
     };
 
     appearance = AppearanceConfig{};
@@ -45,7 +128,8 @@ void Config::SetDefaults()
 void Config::FromJson(const nlohmann::json& j)
 {
     // Version
-    version = j.value("version", 1);
+    const int loadedVersion = j.value("version", 1);
+    version = loadedVersion;
 
     // Overlay
     if (j.contains("overlay")) {
@@ -87,6 +171,10 @@ void Config::FromJson(const nlohmann::json& j)
             mc.category = m.value("category", "");
             mc.enabled  = m.value("enabled", true);
             mc.label    = m.value("label", mc.category);
+            mc.sensorKey = m.value("sensor_key", "");
+            mc.source = m.value("source", "");
+            mc.sensorId = m.value("sensor_id", -1);
+            mc.readingId = m.value("reading_id", -1);
             metrics.push_back(mc);
         }
     }
@@ -116,6 +204,41 @@ void Config::FromJson(const nlohmann::json& j)
         general.language            = g.value("language", general.language);
         general.logLevel            = g.value("log_level", general.logLevel);
     }
+
+    if (loadedVersion < 2) {
+        overlay.autoConnectVr = false;
+        version = 2;
+    }
+
+    if (loadedVersion < 3) {
+        if (overlay.widthMeters <= 0.31f) {
+            overlay.widthMeters = 1.0f;
+        }
+        if (hud.pitchDegrees == -15.0f) {
+            hud.pitchDegrees = 0.0f;
+        }
+        if (hud.distanceMeters <= 1.01f) {
+            hud.distanceMeters = 1.5f;
+        }
+        version = 3;
+    }
+
+    if (loadedVersion < 4) {
+        if (overlay.widthMeters <= 1.01f) {
+            overlay.widthMeters = 1.5f;
+        }
+        version = 4;
+    }
+
+    overlay.autoConnectVr = false;
+
+    wrist.widthMeters = 1.0f;
+    wrist.offsetX = 0.0f;
+    wrist.offsetY = 0.0f;
+    wrist.offsetZ = 0.0f;
+    wrist.tiltX = 0.0f;
+    wrist.tiltY = 0.0f;
+    wrist.tiltZ = 0.0f;
 }
 
 nlohmann::json Config::ToJson() const
@@ -155,11 +278,26 @@ nlohmann::json Config::ToJson() const
     // Metrics
     j["metrics"] = nlohmann::json::array();
     for (auto& m : metrics) {
-        j["metrics"].push_back({
-            {"category", m.category},
+        auto metric = nlohmann::json{
+            {"category", SafeUtf8ForJson(m.category)},
             {"enabled", m.enabled},
-            {"label", m.label}
-        });
+            {"label", SafeUtf8ForJson(m.label)}
+        };
+
+        if (!m.sensorKey.empty()) {
+            metric["sensor_key"] = SafeUtf8ForJson(m.sensorKey);
+        }
+        if (!m.source.empty()) {
+            metric["source"] = SafeUtf8ForJson(m.source);
+        }
+        if (m.sensorId >= 0) {
+            metric["sensor_id"] = m.sensorId;
+        }
+        if (m.readingId >= 0) {
+            metric["reading_id"] = m.readingId;
+        }
+
+        j["metrics"].push_back(metric);
     }
 
     // Appearance
@@ -196,7 +334,7 @@ bool Config::Load(const std::string& path)
 
     std::ifstream file(configPath);
     if (!file.is_open()) {
-        // No config file yet — use defaults and save
+        // No config file yet - use defaults and save.
         Save(configPath);
         return true;
     }
@@ -205,7 +343,7 @@ bool Config::Load(const std::string& path)
         nlohmann::json j = nlohmann::json::parse(file);
         FromJson(j);
     } catch (const std::exception& e) {
-        // Malformed config — keep defaults
+        // Malformed config - keep defaults.
         SetDefaults();
         return false;
     }
@@ -227,7 +365,11 @@ bool Config::Save(const std::string& path)
         return false;
     }
 
-    file << ToJson().dump(4);
+    file << ToJson().dump(
+        4,
+        ' ',
+        false,
+        nlohmann::json::error_handler_t::replace);
     return true;
 }
 

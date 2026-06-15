@@ -23,7 +23,7 @@ public:
     void Destroy();
 
     void UpdateTooltip(const std::wstring& text);
-    void ShowMenu(HWND hwnd, int x, int y);
+    void ShowMenu(HWND hwnd, int x, int y, const std::string& language);
 
     bool IsCreated() const { return created_; }
 

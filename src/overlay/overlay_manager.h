@@ -30,7 +30,7 @@ public:
     void ToggleVisibility();
 
     // Submit a D3D11 texture as overlay content
-    void SetTexture(ID3D11ShaderResourceView* srv);
+    bool SetTexture(ID3D11Texture2D* texture);
 
     // Poll OpenVR events (call each frame)
     void PollEvents();

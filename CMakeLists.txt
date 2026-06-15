@@ -44,14 +44,50 @@ set(OPENVR_INCLUDE_DIR "${openvr_SOURCE_DIR}/headers")
 set(OPENVR_LIB_DIR     "${openvr_SOURCE_DIR}/lib/win64")
 set(OPENVR_BIN_DIR     "${openvr_SOURCE_DIR}/bin/win64")
 
+set(WEBVIEW2_VERSION "1.0.4022.49")
+set(WEBVIEW2_NATIVE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/.nuget-packages/microsoft.web.webview2/${WEBVIEW2_VERSION}/build/native")
+set(WEBVIEW2_INCLUDE_DIR "${WEBVIEW2_NATIVE_DIR}/include")
+set(WEBVIEW2_ARCH_DIR "${WEBVIEW2_NATIVE_DIR}/x64")
+
+if(NOT EXISTS "${WEBVIEW2_INCLUDE_DIR}/WebView2.h")
+    set(WEBVIEW2_PACKAGE_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/.nuget-packages/microsoft.web.webview2/${WEBVIEW2_VERSION}")
+    set(WEBVIEW2_PACKAGE_FILE
+        "${CMAKE_CURRENT_SOURCE_DIR}/.nuget-packages/microsoft.web.webview2/Microsoft.Web.WebView2.${WEBVIEW2_VERSION}.nupkg")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.nuget-packages/microsoft.web.webview2")
+    message(STATUS "Microsoft.Web.WebView2 SDK not found; attempting NuGet package download")
+    file(DOWNLOAD
+        "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/${WEBVIEW2_VERSION}"
+        "${WEBVIEW2_PACKAGE_FILE}"
+        STATUS WEBVIEW2_DOWNLOAD_STATUS
+        SHOW_PROGRESS)
+    list(GET WEBVIEW2_DOWNLOAD_STATUS 0 WEBVIEW2_DOWNLOAD_CODE)
+    if(WEBVIEW2_DOWNLOAD_CODE EQUAL 0)
+        file(MAKE_DIRECTORY "${WEBVIEW2_PACKAGE_DIR}")
+        file(ARCHIVE_EXTRACT
+            INPUT "${WEBVIEW2_PACKAGE_FILE}"
+            DESTINATION "${WEBVIEW2_PACKAGE_DIR}")
+    else()
+        message(WARNING "Microsoft.Web.WebView2 SDK download failed: ${WEBVIEW2_DOWNLOAD_STATUS}")
+    endif()
+endif()
+
+set(WEBVIEW2_AVAILABLE OFF)
+if(EXISTS "${WEBVIEW2_INCLUDE_DIR}/WebView2.h" AND EXISTS "${WEBVIEW2_ARCH_DIR}/WebView2Loader.dll.lib")
+    set(WEBVIEW2_AVAILABLE ON)
+endif()
+
 # ──────────────────────────────────────────────────────────────
 # Core static library (shared by app and tests)
 # ──────────────────────────────────────────────────────────────
 add_library(vr_perf_core STATIC
     src/core/app.cpp
     src/core/config.cpp
+    src/core/log.cpp
     src/data/libre_hardware_monitor_bridge_provider.cpp
     src/data/metric_aggregator.cpp
+    src/data/msi_afterburner_provider.cpp
     src/data/windows_fallback_provider.cpp
     src/hwinfo/hwinfo_reader.cpp
     src/overlay/overlay_manager.cpp
@@ -90,15 +126,28 @@ target_link_libraries(vr_perf_core PUBLIC
 add_executable(vr_perf_profiler WIN32
     src/main.cpp
     src/ui/tray_icon.cpp
-    src/ui/settings_window.cpp
+    src/ui/web_settings_window.cpp
     resources/app.rc
-    resources/settings_dialog.rc
 )
 
 target_link_libraries(vr_perf_profiler PRIVATE
     vr_perf_core
     shell32.lib
 )
+
+if(WEBVIEW2_AVAILABLE)
+    target_compile_definitions(vr_perf_profiler PRIVATE VRPERF_WITH_WEBVIEW2)
+    target_include_directories(vr_perf_profiler PRIVATE "${WEBVIEW2_INCLUDE_DIR}")
+    target_link_libraries(vr_perf_profiler PRIVATE "${WEBVIEW2_ARCH_DIR}/WebView2Loader.dll.lib")
+    add_custom_command(TARGET vr_perf_profiler POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${WEBVIEW2_ARCH_DIR}/WebView2Loader.dll"
+            $<TARGET_FILE_DIR:vr_perf_profiler>
+        COMMENT "Copying WebView2Loader.dll to output directory"
+    )
+else()
+    message(WARNING "Microsoft.Web.WebView2 SDK not found; falling back to Win32 settings window")
+endif()
 
 # Copy openvr_api.dll to output
 add_custom_command(TARGET vr_perf_profiler POST_BUILD

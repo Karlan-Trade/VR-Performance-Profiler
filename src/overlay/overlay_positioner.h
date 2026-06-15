@@ -41,11 +41,7 @@ private:
     float hudPitch_ = -15.0f;
     float hudDistance_ = 1.0f;
 
-    // Wrist parameters
     bool isLeftHand_ = true;
-    float wristOffsetX_ = 0.05f;
-    float wristOffsetY_ = 0.02f;
-    float wristOffsetZ_ = -0.05f;
 };
 
 } // namespace vrperf

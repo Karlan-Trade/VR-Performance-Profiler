@@ -90,6 +90,7 @@ bool LibreHardwareMonitorBridgeProvider::Refresh()
 
             SensorReading reading;
             reading.category = category;
+            reading.source = "LibreHardwareMonitor";
             reading.label = JsonStringValue(item, "label", MetricAggregator::CategoryKey(category));
             reading.value = item.value("value", 0.0);
             reading.unit = JsonStringValue(item, "unit", "");

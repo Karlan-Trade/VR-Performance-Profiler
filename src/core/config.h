@@ -10,11 +10,15 @@ struct MetricConfig {
     std::string category;
     bool enabled = true;
     std::string label;
+    std::string sensorKey;
+    std::string source;
+    int sensorId = -1;
+    int readingId = -1;
 };
 
 struct OverlayConfig {
     std::string mode = "hud";        // "hud" or "wrist"
-    float widthMeters = 0.3f;
+    float widthMeters = 1.5f;
     float alpha = 0.85f;
     int updateIntervalMs = 66;        // ~15fps
     bool visibleOnStart = true;
@@ -23,17 +27,17 @@ struct OverlayConfig {
 
 struct HudConfig {
     float yawDegrees = 0.0f;
-    float pitchDegrees = -15.0f;
-    float distanceMeters = 1.0f;
+    float pitchDegrees = 0.0f;
+    float distanceMeters = 1.5f;
 };
 
 struct WristConfig {
     std::string hand = "left";
-    float widthMeters = 0.12f;
-    float offsetX = 0.05f;
-    float offsetY = 0.02f;
-    float offsetZ = -0.05f;
-    float tiltX = -30.0f;
+    float widthMeters = 1.0f;
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
+    float offsetZ = 0.0f;
+    float tiltX = 0.0f;
     float tiltY = 0.0f;
     float tiltZ = 0.0f;
 };

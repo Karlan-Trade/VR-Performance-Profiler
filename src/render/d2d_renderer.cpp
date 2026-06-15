@@ -10,6 +10,26 @@
 
 namespace vrperf {
 
+namespace {
+
+std::wstring NarrowToWide(const std::string& text)
+{
+    return std::wstring(text.begin(), text.end());
+}
+
+std::wstring Ellipsize(std::wstring text, size_t maxChars)
+{
+    if (text.size() <= maxChars || maxChars < 2) {
+        return text;
+    }
+
+    text.resize(maxChars - 1);
+    text.push_back(L'\u2026');
+    return text;
+}
+
+} // namespace
+
 D2DRenderer::D2DRenderer() = default;
 
 D2DRenderer::~D2DRenderer()
@@ -55,15 +75,24 @@ bool D2DRenderer::Initialize(ID3D11Device* d3dDevice)
         return SUCCEEDED(hr);
     };
 
-    if (!createFormat(32.0f, &titleFormat_)) return false;
-    if (!createFormat(28.0f, &valueFormat_)) return false;
+    if (!createFormat(28.0f, &titleFormat_)) return false;
+    if (!createFormat(24.0f, &labelFormat_)) return false;
+    if (!createFormat(24.0f, &valueFormat_)) return false;
+    if (!createFormat(18.0f, &compactValueFormat_)) return false;
     if (!createFormat(20.0f, &unitFormat_)) return false;
     if (!createFormat(18.0f, &smallFormat_)) return false;
 
     // Set text alignment
     titleFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    labelFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
     valueFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+    compactValueFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
     unitFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    titleFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    labelFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    valueFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    compactValueFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    smallFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 
     // Create D2D device from D3D11 device
     IDXGIDevice* dxgiDevice = nullptr;
@@ -122,13 +151,31 @@ void D2DRenderer::Shutdown()
     if (dividerBrush_) { dividerBrush_->Release(); dividerBrush_ = nullptr; }
 
     if (titleFormat_) { titleFormat_->Release(); titleFormat_ = nullptr; }
+    if (labelFormat_) { labelFormat_->Release(); labelFormat_ = nullptr; }
     if (valueFormat_) { valueFormat_->Release(); valueFormat_ = nullptr; }
+    if (compactValueFormat_) { compactValueFormat_->Release(); compactValueFormat_ = nullptr; }
     if (unitFormat_) { unitFormat_->Release(); unitFormat_ = nullptr; }
     if (smallFormat_) { smallFormat_->Release(); smallFormat_ = nullptr; }
     if (dwriteFactory_) { dwriteFactory_->Release(); dwriteFactory_ = nullptr; }
 
     width_ = 0;
     height_ = 0;
+}
+
+void D2DRenderer::SetTheme(const ColorTheme& theme)
+{
+    theme_ = theme;
+
+    if (bgBrush_) bgBrush_->SetColor(theme_.background);
+    if (textPrimaryBrush_) textPrimaryBrush_->SetColor(theme_.textPrimary);
+    if (textSecondaryBrush_) textSecondaryBrush_->SetColor(theme_.textSecondary);
+    if (goodBrush_) goodBrush_->SetColor(theme_.accentGood);
+    if (warningBrush_) warningBrush_->SetColor(theme_.accentWarning);
+    if (criticalBrush_) criticalBrush_->SetColor(theme_.accentCritical);
+    if (barBgBrush_) barBgBrush_->SetColor(theme_.barBackground);
+    if (barFillBrush_) barFillBrush_->SetColor(theme_.barFill);
+    if (panelBgBrush_) panelBgBrush_->SetColor(theme_.panelBackground);
+    if (dividerBrush_) dividerBrush_->SetColor(theme_.divider);
 }
 
 void D2DRenderer::Resize(ID3D11Device* d3dDevice, uint32_t width, uint32_t height)
@@ -285,6 +332,10 @@ D2D1_COLOR_F D2DRenderer::GetValueColor(SensorCategory category, double value) c
 
 std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
 {
+    if (!std::isfinite(reading.value)) {
+        return L"--";
+    }
+
     std::wstringstream ss;
 
     switch (reading.category) {
@@ -305,17 +356,27 @@ std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
         break;
 
     case SensorCategory::GpuMemory:
-        // Convert MB to GB if large enough
-        if (reading.value > 1024.0) {
-            ss << std::fixed << std::setprecision(1) << (reading.value / 1024.0) << L" GB";
+        if (reading.unit == "%") {
+            ss << std::fixed << std::setprecision(0) << reading.value << L"%";
+        } else if (reading.unit.empty() || reading.unit == "MB") {
+            if (reading.value > 1024.0) {
+                ss << std::fixed << std::setprecision(1) << (reading.value / 1024.0) << L" GB";
+            } else {
+                ss << std::fixed << std::setprecision(0) << reading.value << L" MB";
+            }
         } else {
-            ss << std::fixed << std::setprecision(0) << reading.value << L" MB";
+            ss << std::fixed << std::setprecision(1) << reading.value
+               << L" " << std::wstring(reading.unit.begin(), reading.unit.end());
         }
         break;
 
     case SensorCategory::GpuFan:
     case SensorCategory::Fan:
-        ss << std::fixed << std::setprecision(0) << reading.value << L" RPM";
+        if (reading.unit == "%") {
+            ss << std::fixed << std::setprecision(0) << reading.value << L"%";
+        } else {
+            ss << std::fixed << std::setprecision(0) << reading.value << L" RPM";
+        }
         break;
 
     case SensorCategory::Power:
@@ -324,6 +385,23 @@ std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
 
     case SensorCategory::Voltage:
         ss << std::fixed << std::setprecision(2) << reading.value << L" V";
+        break;
+
+    case SensorCategory::VrFps:
+        ss << std::fixed << std::setprecision(1) << reading.value << L" FPS";
+        break;
+
+    case SensorCategory::VrFrameTime:
+    case SensorCategory::VrGpuFrameTime:
+        ss << std::fixed << std::setprecision(1) << reading.value << L" ms";
+        break;
+
+    case SensorCategory::VrRefreshRate:
+        ss << std::fixed << std::setprecision(0) << reading.value << L" Hz";
+        break;
+
+    case SensorCategory::VrDroppedFrames:
+        ss << std::fixed << std::setprecision(0) << reading.value;
         break;
 
     default:
@@ -338,11 +416,10 @@ std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
 }
 
 void D2DRenderer::DrawSensorPanel(const std::vector<SensorReading>& readings,
-                                  const Config& config,
-                                  double vrFrameTimeMs,
-                                  uint32_t vrDroppedFrames)
+                                  const Config& config)
 {
     if (!context_ || !isDrawing_) return;
+    const bool english = config.general.language == "en";
 
     float w = static_cast<float>(width_);
     float h = static_cast<float>(height_);
@@ -352,101 +429,100 @@ void D2DRenderer::DrawSensorPanel(const std::vector<SensorReading>& readings,
 
     // Layout constants
     const float padding = 20.0f;
-    const float rowHeight = 40.0f;
-    const float barHeight = 12.0f;
-    const float labelWidth = 150.0f;
-    const float valueWidth = 120.0f;
+    const float barHeight = 8.0f;
+    const float valueWidth = 150.0f;
+    const float gap = 12.0f;
 
     float y = padding;
 
-    // Title
-    D2D1_RECT_F titleRect = D2D1::RectF(padding, y, w - padding, y + 36.0f);
-    DrawText(L"VR Performance Monitor", titleRect, titleFormat_, textPrimaryBrush_);
-    y += 44.0f;
+    D2D1_RECT_F titleRect = D2D1::RectF(padding, y, w - padding, y + 30.0f);
+    DrawText(
+        english ? L"VR Performance Monitor" : L"VR \u6027\u80FD\u76D1\u63A7",
+        titleRect,
+        titleFormat_,
+        textPrimaryBrush_);
+    y += 34.0f;
 
     // Divider
     D2D1_RECT_F dividerRect = D2D1::RectF(padding, y, w - padding, y + 1.0f);
     DrawRect(dividerRect, dividerBrush_);
-    y += 8.0f;
+    y += 10.0f;
 
-    if (vrFrameTimeMs > 0.0) {
-        std::wstringstream vrLine;
-        vrLine << L"VR Frame: " << std::fixed << std::setprecision(1)
-               << vrFrameTimeMs << L" ms  Drops: " << vrDroppedFrames;
-        D2D1_RECT_F vrRect = D2D1::RectF(padding, y, w - padding, y + 28.0f);
-        DrawText(vrLine.str(), vrRect, smallFormat_, textSecondaryBrush_);
-        y += 32.0f;
-    }
+    const auto visibleRows = (std::max)(size_t{1}, readings.size());
+    const float availableHeight = (std::max)(40.0f, h - y - padding);
+    const float rowHeight = (std::max)(
+        24.0f,
+        (std::min)(40.0f, availableHeight / static_cast<float>(visibleRows)));
+    IDWriteTextFormat* labelRowFormat = rowHeight < 32.0f
+        ? smallFormat_
+        : labelFormat_;
+    IDWriteTextFormat* valueRowFormat = rowHeight < 32.0f
+        ? compactValueFormat_
+        : valueFormat_;
+    const float labelWidth = (std::max)(
+        80.0f,
+        w - padding * 2.0f - valueWidth - gap);
+    const size_t labelChars = static_cast<size_t>(
+        (std::max)(8.0f, labelWidth / (rowHeight < 32.0f ? 10.0f : 13.0f)));
 
-    // Filter and display enabled metrics
-    for (const auto& metric : config.metrics) {
-        if (!metric.enabled) continue;
-
-        // Find matching readings for this metric category
-        for (const auto& reading : readings) {
-            if (reading.category != SensorCategory::Unknown) {
-                // Simple category matching by string
-                std::string catStr;
-                switch (reading.category) {
-                case SensorCategory::CpuLoad: catStr = "cpu_load"; break;
-                case SensorCategory::CpuTemp: catStr = "cpu_temp"; break;
-                case SensorCategory::GpuLoad: catStr = "gpu_load"; break;
-                case SensorCategory::GpuTemp: catStr = "gpu_temp"; break;
-                case SensorCategory::GpuClock: catStr = "gpu_clock"; break;
-                case SensorCategory::GpuMemory: catStr = "gpu_memory"; break;
-                case SensorCategory::RamUsage: catStr = "ram_usage"; break;
-                case SensorCategory::GpuFan: catStr = "gpu_fan"; break;
-                default: continue;
-                }
-
-                if (catStr != metric.category) continue;
-
-                // Draw label
-                std::wstring label(metric.label.begin(), metric.label.end());
-                D2D1_RECT_F labelRect = D2D1::RectF(padding, y, padding + labelWidth, y + rowHeight);
-                DrawText(label, labelRect, valueFormat_, textSecondaryBrush_);
-
-                // Draw value
-                std::wstring value = FormatReading(reading);
-                D2D1_COLOR_F valueColor = GetValueColor(reading.category, reading.value);
-
-                ID2D1SolidColorBrush* valueBrush = nullptr;
-                context_->CreateSolidColorBrush(valueColor, &valueBrush);
-
-                D2D1_RECT_F valueRect = D2D1::RectF(
-                    w - padding - valueWidth, y,
-                    w - padding, y + rowHeight
-                );
-                DrawText(value, valueRect, valueFormat_, valueBrush);
-
-                if (valueBrush) valueBrush->Release();
-
-                // Draw bar for load/temp categories
-                if (reading.category == SensorCategory::CpuLoad ||
-                    reading.category == SensorCategory::GpuLoad ||
-                    reading.category == SensorCategory::CpuTemp ||
-                    reading.category == SensorCategory::GpuTemp) {
-
-                    float barY = y + rowHeight - barHeight - 4.0f;
-                    D2D1_RECT_F barRect = D2D1::RectF(
-                        padding + labelWidth + 10.0f, barY,
-                        w - padding - valueWidth - 10.0f, barY + barHeight
-                    );
-
-                    float percentage = static_cast<float>(reading.value);
-                    if (reading.category == SensorCategory::CpuTemp ||
-                        reading.category == SensorCategory::GpuTemp) {
-                        // Scale temp: 0-100°C → 0-100%
-                        percentage = (std::min)(percentage, 100.0f);
-                    }
-
-                    DrawBar(barRect, percentage, barBgBrush_, barFillBrush_);
-                }
-
-                y += rowHeight;
-                break; // Only show first matching reading per category
-            }
+    // Readings are already filtered and ordered by the user's exact selections.
+    for (const auto& reading : readings) {
+        if (y + rowHeight > h - padding * 0.5f) {
+            break;
         }
+
+        std::wstring label = Ellipsize(NarrowToWide(reading.label), labelChars);
+        const bool hasBar = reading.category == SensorCategory::CpuLoad ||
+            reading.category == SensorCategory::GpuLoad ||
+            reading.category == SensorCategory::CpuTemp ||
+            reading.category == SensorCategory::GpuTemp;
+        const bool drawBar = hasBar && rowHeight >= 34.0f;
+        const float textBottom = drawBar
+            ? y + rowHeight - barHeight - 5.0f
+            : y + rowHeight;
+
+        D2D1_RECT_F labelRect = D2D1::RectF(
+            padding,
+            y,
+            padding + labelWidth,
+            textBottom);
+        DrawText(label, labelRect, labelRowFormat, textSecondaryBrush_);
+
+        std::wstring value = FormatReading(reading);
+        D2D1_COLOR_F valueColor = GetValueColor(reading.category, reading.value);
+
+        ID2D1SolidColorBrush* valueBrush = nullptr;
+        context_->CreateSolidColorBrush(valueColor, &valueBrush);
+
+        D2D1_RECT_F valueRect = D2D1::RectF(
+            w - padding - valueWidth,
+            y,
+            w - padding,
+            textBottom);
+        DrawText(value, valueRect, valueRowFormat, valueBrush);
+
+        if (valueBrush) {
+            valueBrush->Release();
+        }
+
+        if (drawBar) {
+            float barY = y + rowHeight - barHeight - 2.0f;
+            D2D1_RECT_F barRect = D2D1::RectF(
+                padding,
+                barY,
+                w - padding,
+                barY + barHeight);
+
+            float percentage = static_cast<float>(reading.value);
+            if (reading.category == SensorCategory::CpuTemp ||
+                reading.category == SensorCategory::GpuTemp) {
+                percentage = (std::min)(percentage, 100.0f);
+            }
+
+            DrawBar(barRect, percentage, barBgBrush_, barFillBrush_);
+        }
+
+        y += rowHeight;
     }
 }
 

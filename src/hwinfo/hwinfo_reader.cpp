@@ -220,6 +220,7 @@ void HwInfoReader::ParseSharedMemory()
         SensorReading sr;
         sr.readingId = static_cast<int>(i);
         sr.sensorId = static_cast<int>(re.sensorId);
+        sr.source = "HWiNFO";
         sr.value = re.value;
         sr.unit = WideToNarrow(re.unit);
         sr.label = WideToNarrow(re.label);

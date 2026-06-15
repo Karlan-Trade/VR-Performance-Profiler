@@ -58,6 +58,33 @@ target_link_libraries(test_metric_aggregator PRIVATE
 
 add_test(NAME MetricAggregator COMMAND test_metric_aggregator)
 
+add_executable(test_openvr_frame_timing
+    test_openvr_frame_timing.cpp
+)
+
+target_link_libraries(test_openvr_frame_timing PRIVATE
+    vr_perf_core
+)
+
+add_custom_command(TARGET test_openvr_frame_timing POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OPENVR_BIN_DIR}/openvr_api.dll"
+        $<TARGET_FILE_DIR:test_openvr_frame_timing>
+    COMMENT "Copying openvr_api.dll for OpenVrFrameTiming test"
+)
+
+add_test(NAME OpenVrFrameTiming COMMAND test_openvr_frame_timing)
+
+add_executable(test_msi_afterburner_provider
+    test_msi_afterburner_provider.cpp
+)
+
+target_link_libraries(test_msi_afterburner_provider PRIVATE
+    vr_perf_core
+)
+
+add_test(NAME MsiAfterburnerProvider COMMAND test_msi_afterburner_provider)
+
 add_executable(test_libre_hardware_monitor_bridge_provider
     test_libre_hardware_monitor_bridge_provider.cpp
 )

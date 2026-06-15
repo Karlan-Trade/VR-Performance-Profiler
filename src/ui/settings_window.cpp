@@ -1,5 +1,6 @@
 #include "ui/settings_window.h"
 #include <CommCtrl.h>
+#include <algorithm>
 #include <iomanip>
 #include <iterator>
 #include <sstream>
@@ -34,6 +35,8 @@ namespace vrperf {
 #define IDC_LABEL_THEME     2070
 #define IDC_LABEL_LANGUAGE  2071
 #define IDC_LABEL_INTERVAL  2072
+#define IDC_LIST_METRICS    2080
+#define IDC_BTN_CONNECT_VR  2090
 
 static constexpr UINT_PTR INFO_TIMER_ID = 10;
 
@@ -42,11 +45,23 @@ static const int UPDATE_INTERVALS[] = { 66, 250, 500, 1000, 2000 };
 SettingsWindow::SettingsWindow() = default;
 SettingsWindow::~SettingsWindow() = default;
 
-bool SettingsWindow::Show(HWND parentHwnd, Config& config, ReadingsProvider readingsProvider)
+bool SettingsWindow::Show(HWND parentHwnd,
+                          Config& config,
+                          ReadingsProvider readingsProvider,
+                          ApplyCallback applyCallback,
+                          ConnectCallback connectCallback)
 {
     config_ = &config;
     tempConfig_ = config; // Make a working copy
     readingsProvider_ = std::move(readingsProvider);
+    applyCallback_ = std::move(applyCallback);
+    connectCallback_ = std::move(connectCallback);
+    latestReadings_.clear();
+
+    INITCOMMONCONTROLSEX icc = {};
+    icc.dwSize = sizeof(icc);
+    icc.dwICC = ICC_LISTVIEW_CLASSES;
+    InitCommonControlsEx(&icc);
 
     INT_PTR result = DialogBoxParam(
         GetModuleHandle(nullptr),
@@ -104,7 +119,13 @@ INT_PTR SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 
 void SettingsWindow::OnInitDialog(HWND hwnd)
 {
+    INITCOMMONCONTROLSEX icc = {};
+    icc.dwSize = sizeof(icc);
+    icc.dwICC = ICC_LISTVIEW_CLASSES;
+    InitCommonControlsEx(&icc);
+
     PopulateCombos(hwnd);
+    SetupReadingsList(hwnd);
     ApplyLanguage(hwnd);
 
     // Set initial radio button state
@@ -112,21 +133,6 @@ void SettingsWindow::OnInitDialog(HWND hwnd)
         CheckRadioButton(hwnd, IDC_RADIO_HUD, IDC_RADIO_WRIST, IDC_RADIO_HUD);
     } else {
         CheckRadioButton(hwnd, IDC_RADIO_HUD, IDC_RADIO_WRIST, IDC_RADIO_WRIST);
-    }
-
-    // Set checkbox states for metrics
-    for (const auto& metric : tempConfig_.metrics) {
-        int controlId = 0;
-        if (metric.category == "cpu_load") controlId = IDC_CHECK_CPU_LOAD;
-        else if (metric.category == "cpu_temp") controlId = IDC_CHECK_CPU_TEMP;
-        else if (metric.category == "gpu_load") controlId = IDC_CHECK_GPU_LOAD;
-        else if (metric.category == "gpu_temp") controlId = IDC_CHECK_GPU_TEMP;
-        else if (metric.category == "gpu_memory") controlId = IDC_CHECK_GPU_MEM;
-        else if (metric.category == "ram_usage") controlId = IDC_CHECK_RAM;
-
-        if (controlId) {
-            CheckDlgButton(hwnd, controlId, metric.enabled ? BST_CHECKED : BST_UNCHECKED);
-        }
     }
 
     UpdateInfo(hwnd);
@@ -143,20 +149,7 @@ void SettingsWindow::OnApply(HWND hwnd)
         tempConfig_.overlay.mode = "wrist";
     }
 
-    // Read checkbox states
-    for (auto& metric : tempConfig_.metrics) {
-        int controlId = 0;
-        if (metric.category == "cpu_load") controlId = IDC_CHECK_CPU_LOAD;
-        else if (metric.category == "cpu_temp") controlId = IDC_CHECK_CPU_TEMP;
-        else if (metric.category == "gpu_load") controlId = IDC_CHECK_GPU_LOAD;
-        else if (metric.category == "gpu_temp") controlId = IDC_CHECK_GPU_TEMP;
-        else if (metric.category == "gpu_memory") controlId = IDC_CHECK_GPU_MEM;
-        else if (metric.category == "ram_usage") controlId = IDC_CHECK_RAM;
-
-        if (controlId) {
-            metric.enabled = (IsDlgButtonChecked(hwnd, controlId) == BST_CHECKED);
-        }
-    }
+    ReadMetricSelectionsFromList(hwnd);
 
     // Read theme
     HWND hCombo = GetDlgItem(hwnd, IDC_COMBO_THEME);
@@ -176,11 +169,29 @@ void SettingsWindow::OnApply(HWND hwnd)
     // Apply changes
     *config_ = tempConfig_;
     config_->Save();
+    if (applyCallback_) {
+        applyCallback_();
+    }
 }
 
 void SettingsWindow::OnCancel(HWND /*hwnd*/)
 {
     // Discard changes (tempConfig_ is not applied)
+}
+
+void SettingsWindow::OnConnectSteamVr(HWND hwnd)
+{
+    OnApply(hwnd);
+
+    const bool connected = connectCallback_ && connectCallback_();
+    MessageBoxW(
+        hwnd,
+        connected
+            ? Text(L"SteamVR \u8986\u76D6\u8FDE\u63A5\u6210\u529F.", L"SteamVR overlay connected.").c_str()
+            : Text(L"SteamVR \u8986\u76D6\u8FDE\u63A5\u5931\u8D25.\u8BF7\u5148\u786E\u8BA4 SteamVR \u5DF2\u7ECF\u542F\u52A8,\u7136\u540E\u91CD\u8BD5.",
+                   L"SteamVR overlay connection failed. Start SteamVR first, then retry.").c_str(),
+        Text(L"SteamVR \u8FDE\u63A5", L"SteamVR Connection").c_str(),
+        connected ? MB_OK | MB_ICONINFORMATION : MB_OK | MB_ICONWARNING);
 }
 
 void SettingsWindow::OnTimer(HWND hwnd, WPARAM timerId)
@@ -197,9 +208,11 @@ void SettingsWindow::OnCommand(HWND hwnd, WPARAM wParam)
 
     switch (controlId) {
     case IDC_BTN_APPLY:
-        KillTimer(hwnd, INFO_TIMER_ID);
         OnApply(hwnd);
-        EndDialog(hwnd, IDOK);
+        return;
+
+    case IDC_BTN_CONNECT_VR:
+        OnConnectSteamVr(hwnd);
         return;
 
     case IDC_BTN_CANCEL:
@@ -211,10 +224,17 @@ void SettingsWindow::OnCommand(HWND hwnd, WPARAM wParam)
 
     case IDC_COMBO_LANGUAGE:
         if (notification == CBN_SELCHANGE) {
+            HWND hThemeCombo = GetDlgItem(hwnd, IDC_COMBO_THEME);
+            if (hThemeCombo) {
+                int themeSel = static_cast<int>(SendMessage(hThemeCombo, CB_GETCURSEL, 0, 0));
+                tempConfig_.appearance.theme = (themeSel == 0) ? "dark" : "light";
+            }
             HWND hLangCombo = GetDlgItem(hwnd, IDC_COMBO_LANGUAGE);
             int sel = static_cast<int>(SendMessage(hLangCombo, CB_GETCURSEL, 0, 0));
+            ReadMetricSelectionsFromList(hwnd);
             tempConfig_.general.language = (sel == 1) ? "en" : "zh";
             ApplyLanguage(hwnd);
+            SetupReadingsList(hwnd);
             UpdateInfo(hwnd);
         }
         return;
@@ -237,20 +257,35 @@ void SettingsWindow::ApplyLanguage(HWND hwnd)
     SetDlgItemText(hwnd, IDC_GROUP_OVERLAY, Text(L"\u663E\u793A\u6A21\u5F0F", L"Overlay Mode").c_str());
     SetDlgItemText(hwnd, IDC_RADIO_HUD, Text(L"HUD\uFF08\u5934\u663E\u56FA\u5B9A\uFF09", L"HUD (Head-locked)").c_str());
     SetDlgItemText(hwnd, IDC_RADIO_WRIST, Text(L"\u624B\u8155\uFF08\u63A7\u5236\u5668\uFF09", L"Wrist (Controller)").c_str());
-    SetDlgItemText(hwnd, IDC_GROUP_METRICS, Text(L"\u76D1\u63A7\u9879", L"Metrics").c_str());
-    SetDlgItemText(hwnd, IDC_CHECK_CPU_LOAD, Text(L"CPU \u8D1F\u8F7D", L"CPU Load").c_str());
-    SetDlgItemText(hwnd, IDC_CHECK_CPU_TEMP, Text(L"CPU \u6E29\u5EA6", L"CPU Temp").c_str());
-    SetDlgItemText(hwnd, IDC_CHECK_GPU_LOAD, Text(L"GPU \u8D1F\u8F7D", L"GPU Load").c_str());
-    SetDlgItemText(hwnd, IDC_CHECK_GPU_TEMP, Text(L"GPU \u6E29\u5EA6", L"GPU Temp").c_str());
-    SetDlgItemText(hwnd, IDC_CHECK_GPU_MEM, Text(L"\u663E\u5B58", L"VRAM").c_str());
-    SetDlgItemText(hwnd, IDC_CHECK_RAM, Text(L"\u5185\u5B58", L"RAM").c_str());
+    SetDlgItemText(hwnd, IDC_GROUP_METRICS, Text(L"\u68C0\u6D4B\u5230\u7684\u4F20\u611F\u5668", L"Detected Sensors").c_str());
     SetDlgItemText(hwnd, IDC_GROUP_APPEAR, Text(L"\u754C\u9762", L"Appearance").c_str());
     SetDlgItemText(hwnd, IDC_LABEL_THEME, Text(L"\u4E3B\u9898\uFF1A", L"Theme:").c_str());
     SetDlgItemText(hwnd, IDC_LABEL_LANGUAGE, Text(L"\u8BED\u8A00\uFF1A", L"Language:").c_str());
     SetDlgItemText(hwnd, IDC_LABEL_INTERVAL, Text(L"\u66F4\u65B0\u9891\u7387\uFF1A", L"Update:").c_str());
-    SetDlgItemText(hwnd, IDC_GROUP_DATA, Text(L"\u5F53\u524D\u6570\u636E", L"Live Data").c_str());
+    SetDlgItemText(hwnd, IDC_GROUP_DATA, Text(L"\u6570\u636E\u6765\u6E90", L"Data Source").c_str());
     SetDlgItemText(hwnd, IDC_BTN_APPLY, Text(L"\u5E94\u7528", L"Apply").c_str());
     SetDlgItemText(hwnd, IDC_BTN_CANCEL, Text(L"\u53D6\u6D88", L"Cancel").c_str());
+    SetDlgItemText(hwnd, IDC_BTN_CONNECT_VR, Text(L"\u8FDE\u63A5 SteamVR", L"Connect SteamVR").c_str());
+
+    HWND hThemeCombo = GetDlgItem(hwnd, IDC_COMBO_THEME);
+    if (hThemeCombo) {
+        const auto theme = tempConfig_.appearance.theme;
+        SendMessage(hThemeCombo, CB_RESETCONTENT, 0, 0);
+        SendMessage(hThemeCombo, CB_ADDSTRING, 0,
+                    reinterpret_cast<LPARAM>(Text(L"\u6DF1\u8272", L"Dark").c_str()));
+        SendMessage(hThemeCombo, CB_ADDSTRING, 0,
+                    reinterpret_cast<LPARAM>(Text(L"\u6D45\u8272", L"Light").c_str()));
+        tempConfig_.appearance.theme = theme;
+        SendMessage(hThemeCombo, CB_SETCURSEL, theme == "dark" ? 0 : 1, 0);
+    }
+
+    HWND hLangCombo = GetDlgItem(hwnd, IDC_COMBO_LANGUAGE);
+    if (hLangCombo) {
+        SendMessage(hLangCombo, CB_RESETCONTENT, 0, 0);
+        SendMessage(hLangCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"\u4E2D\u6587"));
+        SendMessage(hLangCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"English"));
+        SendMessage(hLangCombo, CB_SETCURSEL, tempConfig_.general.language == "en" ? 1 : 0, 0);
+    }
 }
 
 void SettingsWindow::PopulateCombos(HWND hwnd)
@@ -286,24 +321,176 @@ void SettingsWindow::PopulateCombos(HWND hwnd)
     }
 }
 
+void SettingsWindow::SetupReadingsList(HWND hwnd)
+{
+    HWND hList = GetDlgItem(hwnd, IDC_LIST_METRICS);
+    if (!hList) {
+        return;
+    }
+
+    ListView_DeleteAllItems(hList);
+    while (ListView_DeleteColumn(hList, 0)) {
+    }
+
+    ListView_SetExtendedListViewStyle(
+        hList,
+        LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+
+    struct Column {
+        const wchar_t* zh;
+        const wchar_t* en;
+        int width;
+    };
+
+    const Column columns[] = {
+        {L"\u7C7B\u578B", L"Metric", 90},
+        {L"GPU / \u8BBE\u5907", L"GPU / Device", 175},
+        {L"\u6570\u503C", L"Value", 75},
+        {L"\u5355\u4F4D", L"Unit", 50},
+        {L"\u6765\u6E90", L"Source", 105},
+        {L"\u539F\u59CB\u6807\u7B7E", L"Raw Label", 150},
+    };
+
+    for (int i = 0; i < static_cast<int>(std::size(columns)); ++i) {
+        LVCOLUMNW column = {};
+        column.mask = LVCF_TEXT | LVCF_WIDTH;
+        auto title = Text(columns[i].zh, columns[i].en);
+        column.pszText = title.data();
+        column.cx = columns[i].width;
+        ListView_InsertColumn(hList, i, &column);
+    }
+}
+
 void SettingsWindow::UpdateInfo(HWND hwnd)
 {
-    std::wstringstream info;
-    const auto readings = readingsProvider_ ? readingsProvider_() : std::vector<SensorReading>{};
+    ReadMetricSelectionsFromList(hwnd);
 
-    if (readings.empty()) {
-        info << Text(L"\u6682\u65E0\u6570\u636E\u3002\r\n", L"No sensor data available.\r\n");
-        info << Text(L"\u8BF7\u786E\u8BA4 LibreHardwareMonitor bridge \u6B63\u5728\u8FD0\u884C\u3002",
-                     L"Confirm that the LibreHardwareMonitor bridge is running.");
+    const auto newReadings = readingsProvider_ ? readingsProvider_() : std::vector<SensorReading>{};
+
+    HWND hList = GetDlgItem(hwnd, IDC_LIST_METRICS);
+    if (!hList) {
+        latestReadings_ = newReadings;
+        return;
+    }
+
+    const int topIndex = ListView_GetTopIndex(hList);
+    SendMessage(hList, WM_SETREDRAW, FALSE, 0);
+
+    if (!HasSameReadingRows(newReadings)) {
+        ListView_DeleteAllItems(hList);
+        latestReadings_ = newReadings;
+
+        for (int i = 0; i < static_cast<int>(latestReadings_.size()); ++i) {
+            InsertReadingRow(hList, i, latestReadings_[i]);
+        }
+
+        if (topIndex > 0 && topIndex < ListView_GetItemCount(hList)) {
+            ListView_EnsureVisible(hList, topIndex, FALSE);
+        }
     } else {
-        for (const auto& reading : readings) {
-            info << CategoryName(reading.category) << L"  "
-                 << std::wstring(reading.label.begin(), reading.label.end())
-                 << L": " << FormatReading(reading) << L"\r\n";
+        latestReadings_ = newReadings;
+        for (int i = 0; i < static_cast<int>(latestReadings_.size()); ++i) {
+            UpdateReadingRow(hList, i, latestReadings_[i]);
         }
     }
 
-    SetDlgItemText(hwnd, IDC_INFO_TEXT, info.str().c_str());
+    SendMessage(hList, WM_SETREDRAW, TRUE, 0);
+    InvalidateRect(hList, nullptr, FALSE);
+}
+
+bool SettingsWindow::HasSameReadingRows(
+    const std::vector<SensorReading>& readings) const
+{
+    if (readings.size() != latestReadings_.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < readings.size(); ++i) {
+        if (SensorReadingKey(readings[i]) != SensorReadingKey(latestReadings_[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void SettingsWindow::InsertReadingRow(HWND hList,
+                                      int row,
+                                      const SensorReading& reading)
+{
+    auto category = CategoryName(reading.category);
+    LVITEMW item = {};
+    item.mask = LVIF_TEXT | LVIF_PARAM;
+    item.iItem = row;
+    item.pszText = category.data();
+    item.lParam = static_cast<LPARAM>(row);
+    const int inserted = ListView_InsertItem(hList, &item);
+    if (inserted >= 0) {
+        UpdateReadingRow(hList, inserted, reading);
+    }
+}
+
+void SettingsWindow::UpdateReadingRow(HWND hList,
+                                      int row,
+                                      const SensorReading& reading)
+{
+    auto category = CategoryName(reading.category);
+    auto device = ToWide(reading.device);
+    auto value = FormatReading(reading);
+    auto unit = ToWide(reading.unit);
+    auto source = ToWide(reading.source);
+    auto label = ToWide(reading.label);
+
+    LVITEMW item = {};
+    item.mask = LVIF_TEXT | LVIF_PARAM;
+    item.iItem = row;
+    item.iSubItem = 0;
+    item.pszText = category.data();
+    item.lParam = static_cast<LPARAM>(row);
+    ListView_SetItem(hList, &item);
+
+    ListView_SetItemText(hList, row, 1, const_cast<wchar_t*>(device.c_str()));
+    ListView_SetItemText(hList, row, 2, const_cast<wchar_t*>(value.c_str()));
+    ListView_SetItemText(hList, row, 3, const_cast<wchar_t*>(unit.c_str()));
+    ListView_SetItemText(hList, row, 4, const_cast<wchar_t*>(source.c_str()));
+    ListView_SetItemText(hList, row, 5, const_cast<wchar_t*>(label.c_str()));
+    ListView_SetCheckState(hList, row, IsReadingEnabled(reading));
+}
+
+void SettingsWindow::ReadMetricSelectionsFromList(HWND hwnd)
+{
+    HWND hList = GetDlgItem(hwnd, IDC_LIST_METRICS);
+    if (!hList) {
+        return;
+    }
+
+    const int itemCount = ListView_GetItemCount(hList);
+    if (itemCount <= 0 || latestReadings_.empty()) {
+        return;
+    }
+
+    std::vector<MetricConfig> selected;
+    for (int i = 0; i < itemCount; ++i) {
+        if (!ListView_GetCheckState(hList, i)) {
+            continue;
+        }
+
+        LVITEMW item = {};
+        item.mask = LVIF_PARAM;
+        item.iItem = i;
+        if (!ListView_GetItem(hList, &item)) {
+            continue;
+        }
+
+        const auto index = static_cast<size_t>(item.lParam);
+        if (index >= latestReadings_.size()) {
+            continue;
+        }
+
+        selected.push_back(MetricFromReading(latestReadings_[index]));
+    }
+
+    tempConfig_.metrics = std::move(selected);
 }
 
 std::wstring SettingsWindow::Text(const wchar_t* zh, const wchar_t* en) const
@@ -329,15 +516,26 @@ std::wstring SettingsWindow::FormatReading(const SensorReading& reading) const
         ss << std::fixed << std::setprecision(0) << reading.value << L" MHz";
         break;
     case SensorCategory::GpuMemory:
-        if (reading.value > 1024.0) {
-            ss << std::fixed << std::setprecision(1) << (reading.value / 1024.0) << L" GB";
+        if (reading.unit == "%") {
+            ss << std::fixed << std::setprecision(0) << reading.value << L"%";
+        } else if (reading.unit.empty() || reading.unit == "MB") {
+            if (reading.value > 1024.0) {
+                ss << std::fixed << std::setprecision(1) << (reading.value / 1024.0) << L" GB";
+            } else {
+                ss << std::fixed << std::setprecision(0) << reading.value << L" MB";
+            }
         } else {
-            ss << std::fixed << std::setprecision(0) << reading.value << L" MB";
+            ss << std::fixed << std::setprecision(1) << reading.value
+               << L" " << ToWide(reading.unit);
         }
         break;
     case SensorCategory::GpuFan:
     case SensorCategory::Fan:
-        ss << std::fixed << std::setprecision(0) << reading.value << L" RPM";
+        if (reading.unit == "%") {
+            ss << std::fixed << std::setprecision(0) << reading.value << L"%";
+        } else {
+            ss << std::fixed << std::setprecision(0) << reading.value << L" RPM";
+        }
         break;
     case SensorCategory::Power:
         ss << std::fixed << std::setprecision(1) << reading.value << L" W";
@@ -348,7 +546,7 @@ std::wstring SettingsWindow::FormatReading(const SensorReading& reading) const
     default:
         ss << std::fixed << std::setprecision(1) << reading.value;
         if (!reading.unit.empty()) {
-            ss << L" " << std::wstring(reading.unit.begin(), reading.unit.end());
+            ss << L" " << ToWide(reading.unit);
         }
         break;
     }
@@ -371,8 +569,134 @@ std::wstring SettingsWindow::CategoryName(SensorCategory category) const
     case SensorCategory::Fan: return Text(L"\u98CE\u6247", L"Fan");
     case SensorCategory::Voltage: return Text(L"\u7535\u538B", L"Voltage");
     case SensorCategory::Power: return Text(L"\u529F\u8017", L"Power");
-    default: return Text(L"\u672A\u77E5", L"Unknown");
+    default: return Text(L"\u5176\u4ED6", L"Other");
     }
+}
+
+std::wstring SettingsWindow::ToWide(const std::string& text) const
+{
+    if (text.empty()) {
+        return {};
+    }
+
+    int length = MultiByteToWideChar(
+        CP_UTF8,
+        MB_ERR_INVALID_CHARS,
+        text.c_str(),
+        static_cast<int>(text.size()),
+        nullptr,
+        0);
+    UINT codePage = CP_UTF8;
+    DWORD flags = MB_ERR_INVALID_CHARS;
+    if (length <= 0) {
+        codePage = CP_ACP;
+        flags = 0;
+        length = MultiByteToWideChar(
+            codePage,
+            flags,
+            text.c_str(),
+            static_cast<int>(text.size()),
+            nullptr,
+            0);
+    }
+
+    if (length <= 0) {
+        return std::wstring(text.begin(), text.end());
+    }
+
+    std::wstring wide(static_cast<size_t>(length), L'\0');
+    MultiByteToWideChar(
+        codePage,
+        flags,
+        text.c_str(),
+        static_cast<int>(text.size()),
+        wide.data(),
+        length);
+    return wide;
+}
+
+std::string SettingsWindow::ToSafeUtf8(const std::string& text) const
+{
+    const auto wide = ToWide(text);
+    if (wide.empty()) {
+        return {};
+    }
+
+    int length = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wide.c_str(),
+        static_cast<int>(wide.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+    if (length <= 0) {
+        return {};
+    }
+
+    std::string utf8(static_cast<size_t>(length), '\0');
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wide.c_str(),
+        static_cast<int>(wide.size()),
+        utf8.data(),
+        length,
+        nullptr,
+        nullptr);
+    return utf8;
+}
+
+bool SettingsWindow::IsReadingEnabled(const SensorReading& reading) const
+{
+    const bool hasExactSelection = std::any_of(
+        tempConfig_.metrics.begin(),
+        tempConfig_.metrics.end(),
+        [](const MetricConfig& metric) {
+            return metric.enabled && !metric.sensorKey.empty();
+        });
+
+    for (const auto& metric : tempConfig_.metrics) {
+        if (!metric.enabled) {
+            continue;
+        }
+        if (!metric.sensorKey.empty()) {
+            if (metric.sensorKey == SensorReadingKey(reading) ||
+                metric.sensorKey == LegacySensorReadingKey(reading)) {
+                return true;
+            }
+            continue;
+        }
+        if (!hasExactSelection &&
+            metric.category == SensorCategoryKey(reading.category)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+MetricConfig SettingsWindow::MetricFromReading(const SensorReading& reading) const
+{
+    MetricConfig metric;
+    metric.category = SensorCategoryKey(reading.category);
+    metric.enabled = true;
+    metric.source = ToSafeUtf8(reading.source);
+    metric.sensorId = reading.sensorId;
+    metric.readingId = reading.readingId;
+    metric.sensorKey = SensorReadingKey(reading);
+
+    metric.label = ToSafeUtf8(reading.label);
+    if (!reading.device.empty()) {
+        const auto separator = reading.device.find(':');
+        const auto gpuLabel = separator == std::string::npos
+            ? reading.device
+            : reading.device.substr(0, separator);
+        metric.label = ToSafeUtf8(gpuLabel) + " " + ToSafeUtf8(reading.label);
+    }
+
+    return metric;
 }
 
 int SettingsWindow::SelectedUpdateIntervalMs(HWND hwnd) const

@@ -33,12 +33,10 @@ public:
 
     // Render sensor panel
     void DrawSensorPanel(const std::vector<SensorReading>& readings,
-                         const Config& config,
-                         double vrFrameTimeMs = 0.0,
-                         uint32_t vrDroppedFrames = 0);
+                         const Config& config);
 
     // Set theme
-    void SetTheme(const ColorTheme& theme) { theme_ = theme; }
+    void SetTheme(const ColorTheme& theme);
 
 private:
     bool CreateTargetBitmap(ID3D11Texture2D* texture);
@@ -77,7 +75,9 @@ private:
     // DirectWrite
     IDWriteFactory* dwriteFactory_ = nullptr;
     IDWriteTextFormat* titleFormat_ = nullptr;
+    IDWriteTextFormat* labelFormat_ = nullptr;
     IDWriteTextFormat* valueFormat_ = nullptr;
+    IDWriteTextFormat* compactValueFormat_ = nullptr;
     IDWriteTextFormat* unitFormat_ = nullptr;
     IDWriteTextFormat* smallFormat_ = nullptr;
 

@@ -18,12 +18,15 @@ int main()
         config.Load(testPath);
 
         assert(config.overlay.mode == "hud");
-        assert(config.overlay.widthMeters == 0.3f);
+        assert(config.overlay.widthMeters == 1.5f);
         assert(config.overlay.alpha == 0.85f);
+        assert(config.version == 4);
         assert(config.overlay.autoConnectVr == false);
-        assert(config.hud.pitchDegrees == -15.0f);
+        assert(config.hud.pitchDegrees == 0.0f);
+        assert(config.hud.distanceMeters == 1.5f);
         assert(config.wrist.hand == "left");
-        assert(config.metrics.size() == 8);
+        assert(config.wrist.widthMeters == 1.0f);
+        assert(config.metrics.size() == 13);
         assert(config.appearance.theme == "dark");
         assert(config.general.language == "zh");
 
@@ -46,6 +49,10 @@ int main()
         for (auto& m : config.metrics) {
             if (m.category == "gpu_clock") {
                 m.enabled = true;
+                m.sensorKey = "v2|4D53492041667465726275726E6572|gpu_clock|1|32|436F726520636C6F636B";
+                m.source = "MSI Afterburner";
+                m.sensorId = 1;
+                m.readingId = 32;
             }
         }
 
@@ -64,6 +71,10 @@ int main()
         for (const auto& m : config2.metrics) {
             if (m.category == "gpu_clock") {
                 assert(m.enabled == true);
+                assert(m.sensorKey == "v2|4D53492041667465726275726E6572|gpu_clock|1|32|436F726520636C6F636B");
+                assert(m.source == "MSI Afterburner");
+                assert(m.sensorId == 1);
+                assert(m.readingId == 32);
             }
         }
 
@@ -85,9 +96,151 @@ int main()
         assert(j.contains("general"));
 
         assert(j["metrics"].is_array());
-        assert(j["metrics"].size() == 8);
+        assert(j["metrics"].size() == 13);
 
         std::cout << "[PASS] JSON structure valid" << std::endl;
+    }
+
+    // Test 4: v1 configs migrate to automatic SteamVR overlay connection.
+    {
+        nlohmann::json oldConfig = {
+            {"version", 1},
+            {"overlay", {
+                {"mode", "hud"},
+                {"auto_connect_vr", false}
+            }}
+        };
+
+        {
+            std::ofstream file(testPath);
+            file << oldConfig.dump(4);
+        }
+
+        vrperf::Config config;
+        config.Load(testPath);
+
+        assert(config.version == 4);
+        assert(config.overlay.autoConnectVr == false);
+        assert(config.overlay.widthMeters == 1.5f);
+        assert(config.hud.pitchDegrees == 0.0f);
+        assert(config.hud.distanceMeters == 1.5f);
+        assert(config.wrist.widthMeters == 1.0f);
+
+        std::cout << "[PASS] v1 auto-connect migration passed" << std::endl;
+    }
+
+    // Test 5: v2 configs using the old tiny HUD defaults migrate to
+    // VRCX-like visible HUD defaults.
+    {
+        nlohmann::json oldConfig = {
+            {"version", 2},
+            {"overlay", {
+                {"mode", "hud"},
+                {"width_meters", 0.3f},
+                {"auto_connect_vr", true}
+            }},
+            {"hud", {
+                {"pitch_degrees", -15.0f},
+                {"distance_meters", 1.0f}
+            }},
+            {"wrist", {
+                {"width_meters", 0.12f},
+                {"offset_x", 0.05f},
+                {"offset_y", 0.02f},
+                {"offset_z", -0.05f},
+                {"tilt_x", -30.0f}
+            }}
+        };
+
+        {
+            std::ofstream file(testPath);
+            file << oldConfig.dump(4);
+        }
+
+        vrperf::Config config;
+        config.Load(testPath);
+
+        assert(config.version == 4);
+        assert(config.overlay.widthMeters == 1.5f);
+        assert(config.hud.pitchDegrees == 0.0f);
+        assert(config.hud.distanceMeters == 1.5f);
+        assert(config.wrist.widthMeters == 1.0f);
+        assert(config.wrist.offsetX == 0.0f);
+        assert(config.wrist.offsetY == 0.0f);
+        assert(config.wrist.offsetZ == 0.0f);
+        assert(config.wrist.tiltX == 0.0f);
+
+        std::cout << "[PASS] v2 HUD visibility migration passed" << std::endl;
+    }
+
+    // Test 6: wrist placement is pinned to the VRCX baseline even if an
+    // already-current config contains stale experimental wrist settings.
+    {
+        nlohmann::json currentConfig = {
+            {"version", 4},
+            {"wrist", {
+                {"hand", "right"},
+                {"width_meters", 0.12f},
+                {"offset_x", 0.05f},
+                {"offset_y", 0.02f},
+                {"offset_z", -0.05f},
+                {"tilt_x", -30.0f},
+                {"tilt_y", 10.0f},
+                {"tilt_z", 5.0f}
+            }}
+        };
+
+        {
+            std::ofstream file(testPath);
+            file << currentConfig.dump(4);
+        }
+
+        vrperf::Config config;
+        config.Load(testPath);
+
+        assert(config.version == 4);
+        assert(config.overlay.autoConnectVr == false);
+        assert(config.wrist.hand == "right");
+        assert(config.wrist.widthMeters == 1.0f);
+        assert(config.wrist.offsetX == 0.0f);
+        assert(config.wrist.offsetY == 0.0f);
+        assert(config.wrist.offsetZ == 0.0f);
+        assert(config.wrist.tiltX == 0.0f);
+        assert(config.wrist.tiltY == 0.0f);
+        assert(config.wrist.tiltZ == 0.0f);
+
+        std::cout << "[PASS] v4 wrist normalization passed" << std::endl;
+    }
+
+    // Test 7: sensor strings from native providers may contain local-codepage
+    // bytes. Saving config must normalize them instead of aborting in JSON dump.
+    {
+        vrperf::Config config;
+        config.Load(testPath);
+        config.metrics.clear();
+
+        std::string invalidBytes = "sensor";
+        invalidBytes.push_back(static_cast<char>(0xFF));
+        invalidBytes += "label";
+
+        vrperf::MetricConfig metric;
+        metric.category = "gpu_temp";
+        metric.enabled = true;
+        metric.label = invalidBytes;
+        metric.source = invalidBytes;
+        metric.sensorKey = invalidBytes;
+        metric.sensorId = 0;
+        metric.readingId = 1;
+        config.metrics.push_back(metric);
+
+        assert(config.Save(testPath));
+        std::ifstream file(testPath);
+        const auto parsed = nlohmann::json::parse(file);
+        assert(parsed["metrics"].is_array());
+        assert(parsed["metrics"].size() == 1);
+        assert(parsed["metrics"][0]["label"].is_string());
+
+        std::cout << "[PASS] invalid UTF-8 config save normalization passed" << std::endl;
     }
 
     // Cleanup

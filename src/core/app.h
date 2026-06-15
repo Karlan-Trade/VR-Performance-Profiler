@@ -4,13 +4,13 @@
 #include "core/config.h"
 #include "data/libre_hardware_monitor_bridge_provider.h"
 #include "data/metric_aggregator.h"
+#include "data/msi_afterburner_provider.h"
 #include "data/windows_fallback_provider.h"
 #include "hwinfo/hwinfo_reader.h"
 #include "overlay/overlay_manager.h"
 #include "overlay/overlay_positioner.h"
 #include "render/d3d11_renderer.h"
 #include "render/d2d_renderer.h"
-#include "ui/settings_window.h"
 #include "ui/tray_icon.h"
 #include "vr/openvr_frame_timing.h"
 
@@ -36,8 +36,13 @@ private:
 
     // Update cycle
     std::vector<SensorReading> CollectSensorReadings();
+    std::vector<SensorReading> CollectDetectedSensorReadings();
+    std::vector<SensorReading> CollectDetectedSensorReadings(
+        const OpenVrFrameTimingSnapshot& frameTiming);
     void UpdateOverlay();
     void ApplyOverlayTransform();
+    void ApplyRuntimeConfig();
+    bool ConnectSteamVrOverlay(HWND ownerHwnd, bool showMessage);
     bool TryInitializeOverlay();
     void TryStartSensorBridge();
     void StopSensorBridge();
@@ -57,6 +62,7 @@ private:
     // Subsystems
     Config config_;
     HwInfoReader hwinfoReader_;
+    MsiAfterburnerProvider msiAfterburnerProvider_;
     LibreHardwareMonitorBridgeProvider libreHardwareMonitorBridgeProvider_;
     WindowsFallbackProvider windowsFallbackProvider_;
     MetricAggregator metricAggregator_;
@@ -66,7 +72,6 @@ private:
     D2DRenderer d2dRenderer_;
     OpenVrFrameTiming openVrFrameTiming_;
     TrayIcon trayIcon_;
-    SettingsWindow settingsWindow_;
 
     bool running_ = false;
     DWORD lastOverlayRetryMs_ = 0;
