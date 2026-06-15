@@ -99,7 +99,7 @@ std::string Config::GetDefaultPath()
 
 void Config::SetDefaults()
 {
-    version = 4;
+    version = 5;
     overlay = OverlayConfig{};
     hud = HudConfig{};
     wrist = WristConfig{};
@@ -230,9 +230,17 @@ void Config::FromJson(const nlohmann::json& j)
         version = 4;
     }
 
+    if (hud.distanceMeters >= 1.49f && hud.distanceMeters <= 1.51f) {
+        hud.distanceMeters = 1.0f;
+    }
+
+    if (loadedVersion < 5) {
+        version = 5;
+    }
+
     overlay.autoConnectVr = false;
 
-    wrist.widthMeters = 1.0f;
+    wrist.widthMeters = 0.75f;
     wrist.offsetX = 0.0f;
     wrist.offsetY = 0.0f;
     wrist.offsetZ = 0.0f;

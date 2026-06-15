@@ -117,6 +117,10 @@ target_compile_definitions(vr_perf_core PUBLIC
     NOMINMAX
 )
 
+if(MSVC)
+    target_compile_options(vr_perf_core PUBLIC /utf-8)
+endif()
+
 target_link_libraries(vr_perf_core PUBLIC
     ${OPENVR_LIB_DIR}/openvr_api.lib
     nlohmann_json::nlohmann_json
@@ -141,6 +145,7 @@ add_executable(vr_perf_profiler WIN32
 
 target_link_libraries(vr_perf_profiler PRIVATE
     vr_perf_core
+    dwmapi.lib
     shell32.lib
 )
 

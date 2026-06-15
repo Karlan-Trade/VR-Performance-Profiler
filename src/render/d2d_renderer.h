@@ -14,6 +14,9 @@
 
 namespace vrperf {
 
+std::wstring FormatOverlayReadingValue(const SensorReading& reading);
+std::wstring FormatOverlayReadingLabel(const SensorReading& reading);
+
 class D2DRenderer {
 public:
     D2DRenderer();
@@ -43,6 +46,7 @@ private:
 
     // Drawing helpers
     void DrawPanelBackground(float width, float height);
+    float MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format) const;
     void DrawText(const std::wstring& text, D2D1_RECT_F rect,
                   IDWriteTextFormat* format, ID2D1Brush* brush);
     void DrawRect(D2D1_RECT_F rect, ID2D1Brush* brush, float strokeWidth = 0);

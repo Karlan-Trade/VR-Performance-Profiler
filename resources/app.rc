@@ -1,6 +1,10 @@
 // VR Performance Profiler - Resource file
 #include <windows.h>
 
+#define IDI_APP_ICON 101
+
+IDI_APP_ICON ICON "app.ico"
+
 // Version information
 1 VERSIONINFO
 FILEVERSION     0,1,0,0

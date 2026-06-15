@@ -5,6 +5,7 @@
 #include "core/log.h"
 
 #include <WebView2.h>
+#include <dwmapi.h>
 #include <nlohmann/json.hpp>
 #include <wrl.h>
 
@@ -23,6 +24,7 @@ namespace {
 
 constexpr UINT_PTR kRefreshTimerId = 41;
 constexpr UINT kRefreshIntervalMs = 1000;
+constexpr DWORD kDwmwaUseImmersiveDarkModeBefore20H1 = 19;
 
 std::wstring ToWide(const std::string& text)
 {
@@ -110,6 +112,11 @@ std::wstring JsonToWide(const nlohmann::json& value)
         ' ',
         false,
         nlohmann::json::error_handler_t::replace));
+}
+
+bool IsDarkTheme(const Config& config)
+{
+    return config.appearance.theme != "light";
 }
 
 std::wstring FormatReadingValue(const SensorReading& reading)
@@ -304,6 +311,8 @@ bool WebSettingsWindow::CreateHostWindow(HWND ownerHwnd)
     wc.lpfnWndProc = WebSettingsWindow::WndProc;
     wc.hInstance = GetModuleHandle(nullptr);
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hIcon = LoadIcon(wc.hInstance, MAKEINTRESOURCE(101));
+    wc.hIconSm = LoadIcon(wc.hInstance, MAKEINTRESOURCE(101));
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     wc.lpszClassName = L"VRPerfProfilerWebSettings";
     RegisterClassExW(&wc);
@@ -321,6 +330,7 @@ bool WebSettingsWindow::CreateHostWindow(HWND ownerHwnd)
         nullptr,
         wc.hInstance,
         this);
+    ApplyWindowFrameTheme();
     return hwnd_ != nullptr;
 }
 
@@ -415,6 +425,33 @@ void WebSettingsWindow::ResizeWebView()
     impl_->controller->put_Bounds(bounds);
 }
 
+void WebSettingsWindow::ApplyWindowFrameTheme()
+{
+    if (!hwnd_) {
+        return;
+    }
+
+    const BOOL useDarkFrame = IsDarkTheme(tempConfig_) ? TRUE : FALSE;
+    HRESULT hr = DwmSetWindowAttribute(
+        hwnd_,
+        DWMWA_USE_IMMERSIVE_DARK_MODE,
+        &useDarkFrame,
+        sizeof(useDarkFrame));
+    if (FAILED(hr)) {
+        DwmSetWindowAttribute(
+            hwnd_,
+            kDwmwaUseImmersiveDarkModeBefore20H1,
+            &useDarkFrame,
+            sizeof(useDarkFrame));
+    }
+
+    RedrawWindow(
+        hwnd_,
+        nullptr,
+        nullptr,
+        RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW);
+}
+
 LRESULT CALLBACK WebSettingsWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     WebSettingsWindow* self = nullptr;
@@ -470,6 +507,9 @@ void WebSettingsWindow::OnWebMessage(const std::wstring& messageJson)
     if (type == "ready" || type == "refresh") {
         RefreshReadings();
         SendState();
+    } else if (type == "previewTheme") {
+        tempConfig_.appearance.theme = message.value("theme", tempConfig_.appearance.theme);
+        ApplyWindowFrameTheme();
     } else if (type == "apply") {
         ApplyFromJson(messageJson);
         SendStatus("settingsApplied", true);
@@ -495,9 +535,14 @@ void WebSettingsWindow::ApplyFromJson(const std::wstring& messageJson)
     }
 
     tempConfig_.overlay.mode = message.value("mode", tempConfig_.overlay.mode);
+    tempConfig_.overlay.widthMeters = (std::clamp)(
+        message.value("overlayWidthMeters", tempConfig_.overlay.widthMeters),
+        0.5f,
+        2.5f);
     const auto wristHand = message.value("wristHand", tempConfig_.wrist.hand);
     tempConfig_.wrist.hand = wristHand == "right" ? "right" : "left";
     tempConfig_.appearance.theme = message.value("theme", tempConfig_.appearance.theme);
+    ApplyWindowFrameTheme();
     tempConfig_.general.language = message.value("language", tempConfig_.general.language);
     tempConfig_.overlay.updateIntervalMs =
         message.value("updateIntervalMs", tempConfig_.overlay.updateIntervalMs);
@@ -577,6 +622,7 @@ std::wstring WebSettingsWindow::BuildConfigJson() const
 
     nlohmann::json config = {
         {"mode", tempConfig_.overlay.mode},
+        {"overlayWidthMeters", tempConfig_.overlay.widthMeters},
         {"wristHand", tempConfig_.wrist.hand},
         {"theme", tempConfig_.appearance.theme},
         {"language", tempConfig_.general.language},
@@ -685,6 +731,9 @@ std::wstring WebSettingsWindow::BuildHtml() const
     .seg button.active { border-color:var(--accent); background:var(--segActive); }
     label { display:block; color:var(--muted); margin:12px 0 6px; }
     select { width:100%; height:34px; border-radius:6px; border:1px solid var(--line); background:var(--control); color:var(--text); padding:0 10px; }
+    input[type=range] { width:100%; accent-color:var(--accent); }
+    .rangeRow { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; }
+    .valueBadge { min-width:54px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums; }
     .actions { display:flex; gap:8px; margin-top:18px; }
     .button.primary { background:var(--accent); border-color:var(--accent); color:var(--primaryText); font-weight:600; }
     .button.ok { background:var(--okBg); border-color:var(--okLine); color:var(--okText); }
@@ -715,6 +764,11 @@ std::wstring WebSettingsWindow::BuildHtml() const
         <button id="handLeft">Left</button>
         <button id="handRight">Right</button>
       </div>
+      <label id="panelSizeLabel" for="panelSize">HUD panel size</label>
+      <div class="rangeRow">
+        <input id="panelSize" type="range" min="0.5" max="2.5" step="0.05">
+        <span id="panelSizeValue" class="valueBadge">1.50 m</span>
+      </div>
       <h2 id="appearanceHeading">Appearance</h2>
       <label id="themeLabel" for="theme">Theme</label>
       <select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select>
@@ -735,12 +789,12 @@ std::wstring WebSettingsWindow::BuildHtml() const
     </main>
   </div>
   <script>
-    const state = { config:{mode:'hud', wristHand:'left', theme:'dark', language:'zh', selectedKeys:[]}, readings:[], filter:'', initialized:false, statusMessage:'', statusOk:null };
+    const state = { config:{mode:'hud', overlayWidthMeters:1.5, wristHand:'left', theme:'dark', language:'zh', selectedKeys:[]}, readings:[], filter:'', initialized:false, statusMessage:'', statusOk:null };
     const $ = id => document.getElementById(id);
     const strings = {
       en: {
         title:'VR Performance Profiler', overlayHeading:'Overlay', appearanceHeading:'Appearance', dataHeading:'Data',
-        hud:'HUD', wrist:'Wrist', wristHand:'Wrist hand', leftHand:'Left', rightHand:'Right', theme:'Theme', language:'Language', themeDark:'Dark', themeLight:'Light',
+        hud:'HUD', wrist:'Wrist', wristHand:'Wrist hand', leftHand:'Left', rightHand:'Right', panelSize:'HUD panel size', theme:'Theme', language:'Language', themeDark:'Dark', themeLight:'Light',
         langZh:'Chinese', langEn:'English', interval:'Update interval', apply:'Apply', connect:'Connect SteamVR',
         sensors:'Detected Sensors', sensorHint:'Select exact readings to show in the VR overlay.', filter:'Filter sensors',
         noRows:'No matching sensor data', metric:'Metric', device:'Device', value:'Value', source:'Source', rawLabel:'Raw Label',
@@ -749,7 +803,7 @@ std::wstring WebSettingsWindow::BuildHtml() const
       },
       zh: {
         title:'VR Performance Profiler', overlayHeading:'\u8986\u76D6', appearanceHeading:'\u754C\u9762', dataHeading:'\u6570\u636E',
-        hud:'HUD', wrist:'\u624B\u8155', wristHand:'\u624B\u8155\u4F4D\u7F6E', leftHand:'\u5DE6\u624B', rightHand:'\u53F3\u624B', theme:'\u4E3B\u9898', language:'\u8BED\u8A00', themeDark:'\u6DF1\u8272', themeLight:'\u6D45\u8272',
+        hud:'HUD', wrist:'\u624B\u8155', wristHand:'\u624B\u8155\u4F4D\u7F6E', leftHand:'\u5DE6\u624B', rightHand:'\u53F3\u624B', panelSize:'HUD \u9762\u677F\u5927\u5C0F', theme:'\u4E3B\u9898', language:'\u8BED\u8A00', themeDark:'\u6DF1\u8272', themeLight:'\u6D45\u8272',
         langZh:'\u4E2D\u6587', langEn:'English', interval:'\u66F4\u65B0\u95F4\u9694', apply:'\u5E94\u7528', connect:'\u8FDE\u63A5 SteamVR',
         sensors:'\u68C0\u6D4B\u5230\u7684\u4F20\u611F\u5668', sensorHint:'\u9009\u62E9\u8981\u663E\u793A\u5728 VR \u8986\u76D6\u4E2D\u7684\u5177\u4F53\u8BFB\u6570\u3002', filter:'\u8FC7\u6EE4\u4F20\u611F\u5668',
         noRows:'\u6CA1\u6709\u5339\u914D\u7684\u4F20\u611F\u5668\u6570\u636E', metric:'\u7C7B\u578B', device:'GPU / \u8BBE\u5907', value:'\u6570\u503C', source:'\u6765\u6E90', rawLabel:'\u539F\u59CB\u6807\u7B7E',
@@ -763,6 +817,7 @@ std::wstring WebSettingsWindow::BuildHtml() const
     function collect(){
       return {
         mode: state.config.mode,
+        overlayWidthMeters: Number($('panelSize').value),
         wristHand: state.config.wristHand || 'left',
         theme: $('theme').value,
         language: $('language').value,
@@ -785,6 +840,7 @@ std::wstring WebSettingsWindow::BuildHtml() const
       setText('wristHandLabel', t('wristHand'));
       setText('handLeft', t('leftHand'));
       setText('handRight', t('rightHand'));
+      setText('panelSizeLabel', t('panelSize'));
       setText('themeLabel', t('theme'));
       setText('languageLabel', t('language'));
       setText('intervalLabel', t('interval'));
@@ -814,6 +870,9 @@ std::wstring WebSettingsWindow::BuildHtml() const
       $('modeWrist').classList.toggle('active', state.config.mode === 'wrist');
       $('handLeft').classList.toggle('active', (state.config.wristHand || 'left') !== 'right');
       $('handRight').classList.toggle('active', state.config.wristHand === 'right');
+      const panelSize = Math.min(2.5, Math.max(0.5, Number(state.config.overlayWidthMeters || 1.5)));
+      $('panelSize').value = panelSize.toFixed(2);
+      $('panelSizeValue').textContent = `${panelSize.toFixed(2)} m`;
       $('theme').value = state.config.theme || 'dark';
       $('language').value = state.config.language || 'zh';
       $('interval').value = String(state.config.updateIntervalMs || 66);
@@ -830,7 +889,8 @@ std::wstring WebSettingsWindow::BuildHtml() const
     $('modeWrist').onclick=()=>{state.config.mode='wrist'; render();};
     $('handLeft').onclick=()=>{state.config.wristHand='left'; state.config.mode='wrist'; render();};
     $('handRight').onclick=()=>{state.config.wristHand='right'; state.config.mode='wrist'; render();};
-    $('theme').onchange=e=>{state.config.theme=e.target.value; render();};
+    $('panelSize').oninput=e=>{state.config.overlayWidthMeters=Number(e.target.value); render();};
+    $('theme').onchange=e=>{state.config.theme=e.target.value; render(); post('previewTheme');};
     $('language').onchange=e=>{state.config.language=e.target.value; render();};
     $('apply').onclick=()=>post('apply');
     $('connect').onclick=()=>post('connect');
@@ -842,6 +902,7 @@ std::wstring WebSettingsWindow::BuildHtml() const
         state.config = msg.config;
         if (current) {
           state.config.mode = current.mode;
+          state.config.overlayWidthMeters = current.overlayWidthMeters;
           state.config.wristHand = current.wristHand;
           state.config.theme = current.theme;
           state.config.language = current.language;

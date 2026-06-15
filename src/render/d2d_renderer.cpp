@@ -4,6 +4,8 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <cwctype>
+#include <windows.h>
 
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
@@ -14,7 +16,43 @@ namespace {
 
 std::wstring NarrowToWide(const std::string& text)
 {
-    return std::wstring(text.begin(), text.end());
+    if (text.empty()) {
+        return {};
+    }
+
+    int length = MultiByteToWideChar(
+        CP_UTF8,
+        MB_ERR_INVALID_CHARS,
+        text.data(),
+        static_cast<int>(text.size()),
+        nullptr,
+        0);
+    UINT codePage = CP_UTF8;
+    DWORD flags = MB_ERR_INVALID_CHARS;
+    if (length <= 0) {
+        codePage = CP_ACP;
+        flags = 0;
+        length = MultiByteToWideChar(
+            codePage,
+            flags,
+            text.data(),
+            static_cast<int>(text.size()),
+            nullptr,
+            0);
+    }
+    if (length <= 0) {
+        return std::wstring(text.begin(), text.end());
+    }
+
+    std::wstring wide(static_cast<size_t>(length), L'\0');
+    MultiByteToWideChar(
+        codePage,
+        flags,
+        text.data(),
+        static_cast<int>(text.size()),
+        wide.data(),
+        length);
+    return wide;
 }
 
 std::wstring Ellipsize(std::wstring text, size_t maxChars)
@@ -25,6 +63,52 @@ std::wstring Ellipsize(std::wstring text, size_t maxChars)
 
     text.resize(maxChars - 1);
     text.push_back(L'\u2026');
+    return text;
+}
+
+std::wstring Trim(std::wstring text)
+{
+    const auto isSpace = [](wchar_t ch) {
+        return std::iswspace(ch) != 0;
+    };
+    text.erase(text.begin(), std::find_if_not(text.begin(), text.end(), isSpace));
+    text.erase(std::find_if_not(text.rbegin(), text.rend(), isSpace).base(), text.end());
+    return text;
+}
+
+bool StartsWithCaseInsensitive(const std::wstring& text, const std::wstring& prefix)
+{
+    if (prefix.empty() || text.size() < prefix.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < prefix.size(); ++i) {
+        if (std::towlower(text[i]) != std::towlower(prefix[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::wstring FirstWord(const std::wstring& text)
+{
+    const auto pos = text.find_first_of(L" \t\r\n");
+    return pos == std::wstring::npos ? text : text.substr(0, pos);
+}
+
+std::wstring CollapseRepeatedPrefix(std::wstring text)
+{
+    const auto word = FirstWord(text);
+    if (word.empty()) {
+        return text;
+    }
+
+    const auto repeated = word + L" " + word;
+    if (StartsWithCaseInsensitive(text, repeated)) {
+        text.erase(0, repeated.size());
+        text = word + L" " + Trim(std::move(text));
+    }
+
     return text;
 }
 
@@ -66,11 +150,11 @@ bool D2DRenderer::Initialize(ID3D11Device* d3dDevice)
     // Create text formats
     auto createFormat = [&](float size, IDWriteTextFormat** fmt) -> bool {
         hr = dwriteFactory_->CreateTextFormat(
-            L"Segoe UI", nullptr,
+            L"Microsoft YaHei UI", nullptr,
             DWRITE_FONT_WEIGHT_REGULAR,
             DWRITE_FONT_STYLE_NORMAL,
             DWRITE_FONT_STRETCH_NORMAL,
-            size, L"en-us", fmt
+            size, L"zh-cn", fmt
         );
         return SUCCEEDED(hr);
     };
@@ -254,7 +338,7 @@ void D2DRenderer::BeginDraw()
     }
 
     context_->BeginDraw();
-    context_->Clear(theme_.background);
+    context_->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
     isDrawing_ = true;
 }
 
@@ -274,6 +358,30 @@ void D2DRenderer::DrawPanelBackground(float width, float height)
 
     // Draw border
     context_->DrawRectangle(panelRect, dividerBrush_, 2.0f);
+}
+
+float D2DRenderer::MeasureTextWidth(const std::wstring& text, IDWriteTextFormat* format) const
+{
+    if (!dwriteFactory_ || !format || text.empty()) {
+        return 0.0f;
+    }
+
+    IDWriteTextLayout* layout = nullptr;
+    HRESULT hr = dwriteFactory_->CreateTextLayout(
+        text.c_str(),
+        static_cast<UINT32>(text.size()),
+        format,
+        4096.0f,
+        256.0f,
+        &layout);
+    if (FAILED(hr) || !layout) {
+        return 0.0f;
+    }
+
+    DWRITE_TEXT_METRICS metrics = {};
+    hr = layout->GetMetrics(&metrics);
+    layout->Release();
+    return SUCCEEDED(hr) ? metrics.widthIncludingTrailingWhitespace : 0.0f;
 }
 
 void D2DRenderer::DrawText(const std::wstring& text, D2D1_RECT_F rect,
@@ -326,11 +434,28 @@ D2D1_COLOR_F D2DRenderer::GetValueColor(SensorCategory category, double value) c
         return theme_.accentGood;
 
     default:
-        return theme_.textPrimary;
+    return theme_.textPrimary;
     }
 }
 
-std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
+std::wstring FormatOverlayReadingLabel(const SensorReading& reading)
+{
+    auto label = Trim(NarrowToWide(reading.label));
+    const auto device = Trim(NarrowToWide(reading.device));
+    if (!device.empty() && StartsWithCaseInsensitive(label, device)) {
+        auto suffix = label.substr(device.size());
+        if (suffix.empty() || std::iswspace(suffix.front())) {
+            suffix = Trim(std::move(suffix));
+            if (!suffix.empty()) {
+                label = suffix;
+            }
+        }
+    }
+    label = CollapseRepeatedPrefix(std::move(label));
+    return label.empty() ? NarrowToWide(SensorCategoryKey(reading.category)) : label;
+}
+
+std::wstring FormatOverlayReadingValue(const SensorReading& reading)
 {
     if (!std::isfinite(reading.value)) {
         return L"--";
@@ -341,7 +466,7 @@ std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
     switch (reading.category) {
     case SensorCategory::CpuTemp:
     case SensorCategory::GpuTemp:
-        ss << std::fixed << std::setprecision(0) << reading.value << L"°C";
+        ss << std::fixed << std::setprecision(0) << reading.value << L"\u00B0C";
         break;
 
     case SensorCategory::CpuLoad:
@@ -366,7 +491,7 @@ std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
             }
         } else {
             ss << std::fixed << std::setprecision(1) << reading.value
-               << L" " << std::wstring(reading.unit.begin(), reading.unit.end());
+               << L" " << NarrowToWide(reading.unit);
         }
         break;
 
@@ -407,12 +532,17 @@ std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
     default:
         ss << std::fixed << std::setprecision(1) << reading.value;
         if (!reading.unit.empty()) {
-            ss << L" " << std::wstring(reading.unit.begin(), reading.unit.end());
+            ss << L" " << NarrowToWide(reading.unit);
         }
         break;
     }
 
     return ss.str();
+}
+
+std::wstring D2DRenderer::FormatReading(const SensorReading& reading) const
+{
+    return FormatOverlayReadingValue(reading);
 }
 
 void D2DRenderer::DrawSensorPanel(const std::vector<SensorReading>& readings,
@@ -421,23 +551,64 @@ void D2DRenderer::DrawSensorPanel(const std::vector<SensorReading>& readings,
     if (!context_ || !isDrawing_) return;
     const bool english = config.general.language == "en";
 
-    float w = static_cast<float>(width_);
-    float h = static_cast<float>(height_);
-
-    // Draw panel background
-    DrawPanelBackground(w, h);
+    const float textureWidth = static_cast<float>(width_);
+    const float textureHeight = static_cast<float>(height_);
 
     // Layout constants
     const float padding = 20.0f;
     const float barHeight = 8.0f;
-    const float valueWidth = 150.0f;
+    const float minValueWidth = 80.0f;
     const float gap = 12.0f;
+
+    const auto title = english ? L"VR Performance Monitor" : L"VR \u6027\u80FD\u76D1\u63A7";
+    const auto visibleRows = (std::max)(size_t{1}, readings.size());
+    const float titleBlockHeight = 34.0f;
+    const float dividerBlockHeight = 11.0f;
+    const float panelHeight = textureHeight;
+    const float availableRowsHeight = (std::max)(
+        40.0f,
+        panelHeight - padding * 2.0f - titleBlockHeight - dividerBlockHeight - 6.0f);
+    const float rowHeight = (std::max)(
+        24.0f,
+        (std::min)(40.0f, availableRowsHeight / static_cast<float>(visibleRows)));
+    IDWriteTextFormat* labelRowFormat = rowHeight < 32.0f
+        ? smallFormat_
+        : labelFormat_;
+    IDWriteTextFormat* valueRowFormat = rowHeight < 32.0f
+        ? compactValueFormat_
+        : valueFormat_;
+
+    std::vector<std::wstring> labels;
+    std::vector<std::wstring> values;
+    labels.reserve(readings.size());
+    values.reserve(readings.size());
+
+    float maxLabelWidth = 0.0f;
+    float maxValueWidth = minValueWidth;
+    for (const auto& reading : readings) {
+        labels.push_back(FormatOverlayReadingLabel(reading));
+        values.push_back(FormatReading(reading));
+        maxLabelWidth = (std::max)(maxLabelWidth, MeasureTextWidth(labels.back(), labelRowFormat));
+        maxValueWidth = (std::max)(maxValueWidth, MeasureTextWidth(values.back(), valueRowFormat));
+    }
+
+    const float w = textureWidth;
+    const float valueWidth = (std::min)(
+        (std::max)(minValueWidth, maxValueWidth + 8.0f),
+        w - padding * 2.0f - gap - 80.0f);
+    const float labelWidth = (std::max)(
+        80.0f,
+        w - padding * 2.0f - valueWidth - gap);
+    const size_t labelChars = static_cast<size_t>(
+        (std::max)(8.0f, labelWidth / (rowHeight < 32.0f ? 10.0f : 13.0f)));
+
+    DrawPanelBackground(w, panelHeight);
 
     float y = padding;
 
     D2D1_RECT_F titleRect = D2D1::RectF(padding, y, w - padding, y + 30.0f);
     DrawText(
-        english ? L"VR Performance Monitor" : L"VR \u6027\u80FD\u76D1\u63A7",
+        title,
         titleRect,
         titleFormat_,
         textPrimaryBrush_);
@@ -448,30 +619,14 @@ void D2DRenderer::DrawSensorPanel(const std::vector<SensorReading>& readings,
     DrawRect(dividerRect, dividerBrush_);
     y += 10.0f;
 
-    const auto visibleRows = (std::max)(size_t{1}, readings.size());
-    const float availableHeight = (std::max)(40.0f, h - y - padding);
-    const float rowHeight = (std::max)(
-        24.0f,
-        (std::min)(40.0f, availableHeight / static_cast<float>(visibleRows)));
-    IDWriteTextFormat* labelRowFormat = rowHeight < 32.0f
-        ? smallFormat_
-        : labelFormat_;
-    IDWriteTextFormat* valueRowFormat = rowHeight < 32.0f
-        ? compactValueFormat_
-        : valueFormat_;
-    const float labelWidth = (std::max)(
-        80.0f,
-        w - padding * 2.0f - valueWidth - gap);
-    const size_t labelChars = static_cast<size_t>(
-        (std::max)(8.0f, labelWidth / (rowHeight < 32.0f ? 10.0f : 13.0f)));
-
     // Readings are already filtered and ordered by the user's exact selections.
-    for (const auto& reading : readings) {
-        if (y + rowHeight > h - padding * 0.5f) {
+    for (size_t index = 0; index < readings.size(); ++index) {
+        const auto& reading = readings[index];
+        if (y + rowHeight > panelHeight - padding * 0.5f) {
             break;
         }
 
-        std::wstring label = Ellipsize(NarrowToWide(reading.label), labelChars);
+        std::wstring label = Ellipsize(labels[index], labelChars);
         const bool hasBar = reading.category == SensorCategory::CpuLoad ||
             reading.category == SensorCategory::GpuLoad ||
             reading.category == SensorCategory::CpuTemp ||
@@ -488,7 +643,7 @@ void D2DRenderer::DrawSensorPanel(const std::vector<SensorReading>& readings,
             textBottom);
         DrawText(label, labelRect, labelRowFormat, textSecondaryBrush_);
 
-        std::wstring value = FormatReading(reading);
+        const std::wstring& value = values[index];
         D2D1_COLOR_F valueColor = GetValueColor(reading.category, reading.value);
 
         ID2D1SolidColorBrush* valueBrush = nullptr;

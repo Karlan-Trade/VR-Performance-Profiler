@@ -208,6 +208,7 @@ internal sealed class SensorBridge : IDisposable
         return new SensorReadingDto
         {
             Category = category,
+            Device = hardware.Name,
             Label = GetLabel(hardware, sensor),
             Value = Math.Round(sensor.Value.Value, 2),
             Unit = GetUnit(sensor.SensorType)
@@ -430,6 +431,9 @@ internal sealed record SensorReadingDto
 
     [JsonPropertyName("label")]
     public string Label { get; init; } = string.Empty;
+
+    [JsonPropertyName("device")]
+    public string Device { get; init; } = string.Empty;
 
     [JsonPropertyName("value")]
     public double Value { get; init; }

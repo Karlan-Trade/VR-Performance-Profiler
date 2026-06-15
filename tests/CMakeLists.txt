@@ -75,6 +75,23 @@ add_custom_command(TARGET test_openvr_frame_timing POST_BUILD
 
 add_test(NAME OpenVrFrameTiming COMMAND test_openvr_frame_timing)
 
+add_executable(test_overlay_reading_format
+    test_overlay_reading_format.cpp
+)
+
+target_link_libraries(test_overlay_reading_format PRIVATE
+    vr_perf_core
+)
+
+add_custom_command(TARGET test_overlay_reading_format POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OPENVR_BIN_DIR}/openvr_api.dll"
+        $<TARGET_FILE_DIR:test_overlay_reading_format>
+    COMMENT "Copying openvr_api.dll for OverlayReadingFormat test"
+)
+
+add_test(NAME OverlayReadingFormat COMMAND test_overlay_reading_format)
+
 add_executable(test_msi_afterburner_provider
     test_msi_afterburner_provider.cpp
 )

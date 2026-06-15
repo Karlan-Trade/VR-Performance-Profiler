@@ -15,8 +15,8 @@ int main()
         std::ofstream file(path);
         file << R"({
             "readings": [
-                { "category": "cpu_temp", "label": "CPU Package", "value": 68.0, "unit": "C" },
-                { "category": "gpu_temp", "label": "GPU Core", "value": 62.0, "unit": "C" },
+                { "category": "cpu_temp", "device": "CPU", "label": "CPU Package", "value": 68.0, "unit": "C" },
+                { "category": "gpu_temp", "device": "GPU2", "label": "GPU2 GPU Core", "value": 62.0, "unit": "C" },
                 { "category": "unknown", "label": "Ignored", "value": 1.0, "unit": "" }
             ]
         })";
@@ -37,11 +37,13 @@ int main()
     for (const auto& reading : readings) {
         if (reading.category == vrperf::SensorCategory::CpuTemp) {
             sawCpuTemp = true;
+            assert(reading.device == "CPU");
             assert(reading.label == "CPU Package");
             assert(reading.value == 68.0);
         } else if (reading.category == vrperf::SensorCategory::GpuTemp) {
             sawGpuTemp = true;
-            assert(reading.label == "GPU Core");
+            assert(reading.device == "GPU2");
+            assert(reading.label == "GPU2 GPU Core");
             assert(reading.value == 62.0);
         }
     }

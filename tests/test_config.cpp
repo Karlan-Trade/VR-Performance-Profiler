@@ -20,12 +20,12 @@ int main()
         assert(config.overlay.mode == "hud");
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.overlay.alpha == 0.85f);
-        assert(config.version == 4);
+        assert(config.version == 5);
         assert(config.overlay.autoConnectVr == false);
         assert(config.hud.pitchDegrees == 0.0f);
-        assert(config.hud.distanceMeters == 1.5f);
+        assert(config.hud.distanceMeters == 1.0f);
         assert(config.wrist.hand == "left");
-        assert(config.wrist.widthMeters == 1.0f);
+        assert(config.wrist.widthMeters == 0.75f);
         assert(config.metrics.size() == 13);
         assert(config.appearance.theme == "dark");
         assert(config.general.language == "zh");
@@ -40,6 +40,7 @@ int main()
 
         // Modify some values
         config.overlay.mode = "wrist";
+        config.overlay.widthMeters = 1.25f;
         config.overlay.alpha = 0.9f;
         config.overlay.updateIntervalMs = 1000;
         config.appearance.theme = "light";
@@ -63,6 +64,7 @@ int main()
         config2.Load(testPath);
 
         assert(config2.overlay.mode == "wrist");
+        assert(config2.overlay.widthMeters == 1.25f);
         assert(config2.overlay.alpha == 0.9f);
         assert(config2.overlay.updateIntervalMs == 1000);
         assert(config2.appearance.theme == "light");
@@ -94,6 +96,7 @@ int main()
         assert(j.contains("appearance"));
         assert(j.contains("hotkeys"));
         assert(j.contains("general"));
+        assert(j["overlay"]["width_meters"] == 1.25f);
 
         assert(j["metrics"].is_array());
         assert(j["metrics"].size() == 13);
@@ -119,12 +122,12 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 4);
+        assert(config.version == 5);
         assert(config.overlay.autoConnectVr == false);
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.hud.pitchDegrees == 0.0f);
-        assert(config.hud.distanceMeters == 1.5f);
-        assert(config.wrist.widthMeters == 1.0f);
+        assert(config.hud.distanceMeters == 1.0f);
+        assert(config.wrist.widthMeters == 0.75f);
 
         std::cout << "[PASS] v1 auto-connect migration passed" << std::endl;
     }
@@ -160,11 +163,11 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 4);
+        assert(config.version == 5);
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.hud.pitchDegrees == 0.0f);
-        assert(config.hud.distanceMeters == 1.5f);
-        assert(config.wrist.widthMeters == 1.0f);
+        assert(config.hud.distanceMeters == 1.0f);
+        assert(config.wrist.widthMeters == 0.75f);
         assert(config.wrist.offsetX == 0.0f);
         assert(config.wrist.offsetY == 0.0f);
         assert(config.wrist.offsetZ == 0.0f);
@@ -173,7 +176,7 @@ int main()
         std::cout << "[PASS] v2 HUD visibility migration passed" << std::endl;
     }
 
-    // Test 6: wrist placement is pinned to the VRCX baseline even if an
+    // Test 6: wrist placement is pinned to the compact baseline even if an
     // already-current config contains stale experimental wrist settings.
     {
         nlohmann::json currentConfig = {
@@ -198,10 +201,10 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 4);
+        assert(config.version == 5);
         assert(config.overlay.autoConnectVr == false);
         assert(config.wrist.hand == "right");
-        assert(config.wrist.widthMeters == 1.0f);
+        assert(config.wrist.widthMeters == 0.75f);
         assert(config.wrist.offsetX == 0.0f);
         assert(config.wrist.offsetY == 0.0f);
         assert(config.wrist.offsetZ == 0.0f);
@@ -241,6 +244,30 @@ int main()
         assert(parsed["metrics"][0]["label"].is_string());
 
         std::cout << "[PASS] invalid UTF-8 config save normalization passed" << std::endl;
+    }
+
+    // Test 8: current schema configs using the old far HUD default still
+    // normalize to the closer baseline on load.
+    {
+        nlohmann::json currentConfig = {
+            {"version", 5},
+            {"hud", {
+                {"distance_meters", 1.5f}
+            }}
+        };
+
+        {
+            std::ofstream file(testPath);
+            file << currentConfig.dump(4);
+        }
+
+        vrperf::Config config;
+        config.Load(testPath);
+
+        assert(config.version == 5);
+        assert(config.hud.distanceMeters == 1.0f);
+
+        std::cout << "[PASS] current HUD distance normalization passed" << std::endl;
     }
 
     // Cleanup

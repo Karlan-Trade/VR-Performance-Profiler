@@ -32,6 +32,7 @@ private:
     bool CreateHostWindow(HWND ownerHwnd);
     bool InitializeWebView();
     void ResizeWebView();
+    void ApplyWindowFrameTheme();
     void ShutdownWebView();
     void OnWebMessage(const std::wstring& messageJson);
     void SendState();

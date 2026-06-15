@@ -28,12 +28,12 @@ struct OverlayConfig {
 struct HudConfig {
     float yawDegrees = 0.0f;
     float pitchDegrees = 0.0f;
-    float distanceMeters = 1.5f;
+    float distanceMeters = 1.0f;
 };
 
 struct WristConfig {
     std::string hand = "left";
-    float widthMeters = 1.0f;
+    float widthMeters = 0.75f;
     float offsetX = 0.0f;
     float offsetY = 0.0f;
     float offsetZ = 0.0f;
