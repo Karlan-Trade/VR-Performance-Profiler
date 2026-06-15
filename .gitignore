@@ -3,6 +3,7 @@ build/
 build-*/
 out/
 cmake-build-*/
+dist/
 .appdata/
 .dotnet-home/
 .nuget-packages/
@@ -17,6 +18,14 @@ cmake-build-*/
 .idea/
 *.swp
 *~
+
+# Local agent instructions
+AGENT.md
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.agents/
+.codex/
 
 # CMake generated
 CMakeFiles/

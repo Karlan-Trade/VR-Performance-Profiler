@@ -94,3 +94,13 @@ target_link_libraries(test_libre_hardware_monitor_bridge_provider PRIVATE
 )
 
 add_test(NAME LibreHardwareMonitorBridgeProvider COMMAND test_libre_hardware_monitor_bridge_provider)
+
+add_executable(test_single_instance_guard
+    test_single_instance_guard.cpp
+)
+
+target_link_libraries(test_single_instance_guard PRIVATE
+    vr_perf_core
+)
+
+add_test(NAME SingleInstanceGuard COMMAND test_single_instance_guard)

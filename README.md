@@ -1,5 +1,7 @@
 # VR Performance Profiler
 
+[中文说明](README.zh-CN.md)
+
 A SteamVR overlay application that displays real-time system hardware monitoring data in VR.
 
 ## Features
@@ -44,6 +46,31 @@ cd build
 cmake .. -G "Visual Studio 17 2022" -A x64
 cmake --build . --config Release
 ```
+
+## Packaging
+
+The Windows installer does not bundle SteamVR. It packages the profiler,
+OpenVR client DLL, WebView2 loader, and a self-contained x64
+LibreHardwareMonitor bridge so users do not need to install the .NET runtime.
+
+Run from a Visual Studio x64 Developer Command Prompt:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package_installer.ps1
+```
+
+Outputs are written to `dist/`:
+
+- `VRPerformanceProfiler-<version>-Setup.exe` installs for the current user
+  and lets the user choose the installation location. The default is
+  `%LOCALAPPDATA%\Programs\VR Performance Profiler`; if the selected folder is
+  not already named `VR Performance Profiler`, the installer creates that
+  product subfolder under the selected location.
+- `VRPerformanceProfiler-<version>-portable.zip` is a portable fallback.
+
+The installer creates Start Menu and desktop shortcuts, registers an uninstall
+entry under the current user, and launches the app after installation. SteamVR
+must still be installed separately.
 
 ### Running
 
@@ -117,4 +144,6 @@ OpenVR compositor timing API.
 
 ## License
 
-MIT License
+MIT License. See `LICENSE`.
+
+Third-party dependency notices are listed in `THIRD_PARTY_NOTICES.md`.

@@ -1,9 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(VRPerfProfiler VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 # ──────────────────────────────────────────────────────────────
 # Dependencies via FetchContent
@@ -85,6 +93,7 @@ add_library(vr_perf_core STATIC
     src/core/app.cpp
     src/core/config.cpp
     src/core/log.cpp
+    src/core/single_instance_guard.cpp
     src/data/libre_hardware_monitor_bridge_provider.cpp
     src/data/metric_aggregator.cpp
     src/data/msi_afterburner_provider.cpp
