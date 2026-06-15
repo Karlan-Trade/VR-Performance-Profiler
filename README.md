@@ -49,19 +49,17 @@ LibreHardwareMonitor bridge 会把快照写入：
 运行发布包中的：
 
 ```text
-VRPerformanceProfiler-<version>-Setup.exe
+VRPerformanceProfiler-<version>-Setup.msi
 ```
 
 安装器会：
 
 - 允许用户选择安装位置
 - 默认安装到 `%LOCALAPPDATA%\Programs\VR Performance Profiler`
-- 如果选择的目录不是 `VR Performance Profiler`，会在该目录下创建产品子目录
 - 安装主程序、OpenVR DLL、WebView2 loader、自包含的 LibreHardwareMonitor bridge
-- 创建开始菜单快捷方式、可选桌面快捷方式和标准卸载项
-- 安装完成后可选择启动程序
+- 创建开始菜单快捷方式和标准卸载项
 
-安装器由 Inno Setup 生成，不再使用旧的自制 C# 自解压安装器。卸载由 Inno Setup 标准卸载器处理。
+安装器由 WiX Toolset 生成标准 Windows Installer MSI，不再发布压缩自解压 EXE 安装器。
 
 ## 便携版
 
@@ -113,7 +111,7 @@ VRPerformanceProfiler-<version>-portable.zip
 2. Visual Studio 2022，安装 C++ Desktop Development 工作负载
 3. .NET 8 SDK 或更高版本
 4. SteamVR/OpenVR 运行环境
-5. Inno Setup 6，用于构建安装器；只构建便携 ZIP 时可不安装
+5. WiX Toolset 4，用于构建 MSI 安装器；只构建便携 ZIP 时可不安装
 
 示例：
 
@@ -139,7 +137,7 @@ dist\
 ```
 
 打包脚本会生成安装器和便携 ZIP。安装器不会打包 SteamVR。
-安装器由 Inno Setup 6 生成；构建安装器时需要本机安装 Inno Setup 并确保 `ISCC.exe` 在 PATH 中或位于默认安装目录。若只需要便携 ZIP，可添加 `-SkipInstallerExe`。
+安装器由 WiX Toolset 4 生成；构建 MSI 时需要 `wix.exe` 在 PATH 中，或安装到仓库本地 `.tools\wix\wix.exe`。若只需要便携 ZIP，可添加 `-SkipMsi`。
 
 ## 反作弊边界
 

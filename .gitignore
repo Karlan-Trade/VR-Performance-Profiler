@@ -8,6 +8,7 @@ dist/
 .dotnet-home/
 .nuget-packages/
 .tools/
+.wix/
 .codex-tmp-*/
 
 # IDE

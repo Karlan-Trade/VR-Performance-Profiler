@@ -3,7 +3,8 @@ param(
     [string]$BuildDir = "build-release",
     [string]$OutputDir = "dist",
     [switch]$SkipBuild,
-    [switch]$SkipInstallerExe
+    [switch]$SkipInstallerExe,
+    [switch]$SkipMsi
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,23 +33,15 @@ function Assert-Command {
     }
 }
 
-function Find-InnoSetupCompiler {
-    $command = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+function Find-WixToolset {
+    $command = Get-Command "wix.exe" -ErrorAction SilentlyContinue
     if ($command) {
         return $command.Source
     }
 
-    $candidates = @(
-        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
-        "${env:ProgramFiles(x86)}\Inno Setup 5\ISCC.exe",
-        "$env:ProgramFiles\Inno Setup 5\ISCC.exe"
-    )
-
-    foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path $candidate)) {
-            return $candidate
-        }
+    $localTool = Join-Path (Resolve-RepoRoot) ".tools\wix\wix.exe"
+    if (Test-Path $localTool) {
+        return $localTool
     }
 
     return $null
@@ -79,9 +72,17 @@ function Copy-RequiredFile {
     Copy-Item -Path $Source -Destination $Destination -Force
 }
 
-function Escape-InnoString {
+function Escape-WixAttribute {
     param([string]$Value)
-    return $Value.Replace('"', '""')
+    return $Value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace('"', "&quot;").Replace("'", "&apos;")
+}
+
+function ConvertTo-LicenseRtf {
+    param([string]$Text)
+
+    $escaped = $Text.Replace("\", "\\").Replace("{", "\{").Replace("}", "\}")
+    $escaped = $escaped -replace "`r?`n", "\par`r`n"
+    return "{\rtf1\ansi\deff0`r`n$escaped`r`n}"
 }
 
 $repoRoot = Resolve-RepoRoot
@@ -92,8 +93,9 @@ $packageRoot = Join-Path $outputPath "VRPerformanceProfiler-$version"
 $payloadRoot = Join-Path $packageRoot "payload"
 $appPayload = Join-Path $payloadRoot "app"
 $installerWork = Join-Path $packageRoot "installer"
-$installerName = "VRPerformanceProfiler-$version-Setup.exe"
+$installerName = "VRPerformanceProfiler-$version-Setup.msi"
 $installerPath = Join-Path $outputPath $installerName
+$legacyInstallerPath = Join-Path $outputPath "VRPerformanceProfiler-$version-Setup.exe"
 $portableZip = Join-Path $outputPath "VRPerformanceProfiler-$version-portable.zip"
 
 Assert-Command "cmake"
@@ -176,132 +178,108 @@ if (Test-Path $portableZip) {
 }
 Compress-Archive -Path (Join-Path $appPayload "*") -DestinationPath $portableZip -Force
 
-if (-not $SkipInstallerExe) {
-    $iscc = Find-InnoSetupCompiler
-    if (-not $iscc) {
-        throw "Inno Setup compiler ISCC.exe was not found. Install Inno Setup 6, then rerun this script. Portable package was still created: $portableZip"
+if (Test-Path $legacyInstallerPath) {
+    Remove-Item -Path $legacyInstallerPath -Force
+}
+
+if (-not $SkipInstallerExe -and -not $SkipMsi) {
+    $wix = Find-WixToolset
+    if (-not $wix) {
+        throw "WiX Toolset wix.exe was not found. Install it with: dotnet tool install --tool-path .\.tools\wix wix --version 4.0.5. Portable package was still created: $portableZip"
     }
 
-    $setupScript = Join-Path $installerWork "VRPerformanceProfiler.iss"
-    $escapedAppPayload = Escape-InnoString $appPayload
-    $escapedOutputPath = Escape-InnoString $outputPath
-    $escapedIcon = Escape-InnoString (Join-Path $repoRoot "resources\app.ico")
-    $escapedInstallerNameWithoutExt = Escape-InnoString ([System.IO.Path]::GetFileNameWithoutExtension($installerName))
+    $licenseRtf = Join-Path $installerWork "License.rtf"
+    Set-Content -Path $licenseRtf -Value (ConvertTo-LicenseRtf (Get-Content -Path (Join-Path $repoRoot "LICENSE") -Raw)) -Encoding ASCII
 
-    $innoScript = @"
-#define AppName "VR Performance Profiler"
-#define AppVersion "$version"
-#define AppPublisher "VR Performance Profiler"
-#define AppExeName "vr_perf_profiler.exe"
+    $componentBuilder = [System.Text.StringBuilder]::new()
+    $fileIndex = 1
+    Get-ChildItem -Path $appPayload -File -Recurse |
+        Sort-Object FullName |
+        ForEach-Object {
+            $relativePath = $_.FullName.Substring($appPayload.Length).TrimStart("\")
+            $directoryId = "INSTALLFOLDER"
+            if ($relativePath.StartsWith("lhm_bridge\", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $directoryId = "LhmBridgeFolder"
+            }
 
-[Setup]
-AppId={{7E7F19F2-8AC4-4B64-B4B4-7D9E9C1D989B}
-AppName={#AppName}
-AppVersion={#AppVersion}
-AppPublisher={#AppPublisher}
-DefaultDirName={localappdata}\Programs\{#AppName}
-DefaultGroupName={#AppName}
-DisableProgramGroupPage=yes
-OutputDir=$escapedOutputPath
-OutputBaseFilename=$escapedInstallerNameWithoutExt
-SetupIconFile=$escapedIcon
-UninstallDisplayIcon={app}\{#AppExeName}
-Compression=lzma2
-SolidCompression=yes
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
-PrivilegesRequired=lowest
-CloseApplications=yes
-RestartApplications=no
-WizardStyle=modern
-MinVersion=10.0
+            $source = Escape-WixAttribute $_.FullName
+            [void]$componentBuilder.AppendLine("    <Component Id=""cmp$fileIndex"" Directory=""$directoryId"" Guid=""*"">")
+            [void]$componentBuilder.AppendLine("      <File Id=""fil$fileIndex"" Source=""$source"" KeyPath=""yes"" />")
+            [void]$componentBuilder.AppendLine("    </Component>")
+            $fileIndex++
+        }
 
-[Files]
-Source: "$escapedAppPayload\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+    $wixSource = Join-Path $installerWork "VRPerformanceProfiler.wxs"
+    $escapedLicenseRtf = Escape-WixAttribute $licenseRtf
+    $escapedIcon = Escape-WixAttribute (Join-Path $repoRoot "resources\app.ico")
+    $components = $componentBuilder.ToString().TrimEnd()
 
-[Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+    $wixXml = @"
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="VR Performance Profiler"
+           Manufacturer="VR Performance Profiler"
+           Version="$version"
+           UpgradeCode="7E7F19F2-8AC4-4B64-B4B4-7D9E9C1D989B"
+           Scope="perUser">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of VR Performance Profiler is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="medium" />
+    <Icon Id="AppIcon.ico" SourceFile="$escapedIcon" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_InstallDir" />
+    <WixVariable Id="WixUILicenseRtf" Value="$escapedLicenseRtf" />
 
-[Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="LocalProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="VR Performance Profiler">
+          <Directory Id="LhmBridgeFolder" Name="lhm_bridge" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
 
-[Run]
-Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="VR Performance Profiler" />
+    </StandardDirectory>
 
-[Code]
-const
-  ProductFolderName = 'VR Performance Profiler';
+    <ComponentGroup Id="ProductComponents">
+$components
+      <Component Id="ApplicationShortcut" Directory="ApplicationProgramsFolder" Guid="*">
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="VR Performance Profiler"
+                  Description="VR Performance Profiler"
+                  Target="[INSTALLFOLDER]vr_perf_profiler.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\VR Performance Profiler"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
 
-function RemoveTrailingBackslash(Value: string): string;
-begin
-  Result := RemoveBackslash(Value);
-end;
-
-function IsDriveRoot(Value: string): Boolean;
-var
-  Root: string;
-begin
-  Root := RemoveTrailingBackslash(ExtractFileDrive(Value) + '\');
-  Result := CompareText(RemoveTrailingBackslash(Value), Root) = 0;
-end;
-
-function IsProductFolder(Value: string): Boolean;
-begin
-  Result := CompareText(ExtractFileName(RemoveTrailingBackslash(Value)), ProductFolderName) = 0;
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-var
-  SelectedDir: string;
-begin
-  Result := True;
-  if CurPageID = wpSelectDir then
-  begin
-    SelectedDir := RemoveTrailingBackslash(WizardDirValue);
-    if IsDriveRoot(SelectedDir) then
-    begin
-      MsgBox('Choose a folder below a drive root.', mbError, MB_OK);
-      Result := False;
-      exit;
-    end;
-
-    if not IsProductFolder(SelectedDir) then
-    begin
-      WizardForm.DirEdit.Text := AddBackslash(SelectedDir) + ProductFolderName;
-    end;
-  end;
-end;
-
-function IsWebView2RuntimeInstalled(): Boolean;
-begin
-  Result :=
-    RegKeyExists(HKLM64, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') or
-    RegKeyExists(HKLM32, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') or
-    RegKeyExists(HKCU64, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') or
-    RegKeyExists(HKCU32, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}');
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    if not IsWebView2RuntimeInstalled() then
-    begin
-      MsgBox(
-        'WebView2 Runtime was not detected. The settings window may require Microsoft Edge WebView2 Runtime.',
-        mbInformation,
-        MB_OK);
-    end;
-  end;
-end;
+    <Feature Id="MainFeature" Title="VR Performance Profiler" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+</Wix>
 "@
 
-    Set-Content -Path $setupScript -Value $innoScript -Encoding UTF8
-    Invoke-Native -FilePath $iscc -Arguments @($setupScript)
+    Set-Content -Path $wixSource -Value $wixXml -Encoding UTF8
+    Invoke-Native -FilePath $wix -Arguments @(
+        "build",
+        "-arch", "x64",
+        "-ext", "WixToolset.UI.wixext",
+        "-pdbtype", "none",
+        "-out", $installerPath,
+        $wixSource
+    )
 
     if (-not (Test-Path $installerPath)) {
-        throw "Inno Setup completed without creating installer: $installerPath"
+        throw "WiX completed without creating installer: $installerPath"
     }
 }
 
