@@ -17,18 +17,6 @@ A SteamVR overlay application that displays real-time system hardware monitoring
 - **Theme-aware settings window** — The Web settings content and native title bar follow the selected light/dark theme
 - **Lightweight** — Minimal performance overhead, runs alongside VR games
 
-## v0.1.2 Update
-
-- Switched the installer package to Inno Setup, replacing the old custom C# self-extracting bootstrapper to reduce security software false positives
-- The installer still supports a custom install directory, Start Menu shortcuts, an optional desktop shortcut, and a standard uninstall entry
-
-## v0.1.1 Update
-
-- Fixed incorrect temperature unit symbols so overlay readings consistently show `°C`
-- Fixed the Web settings window title bar so it follows the selected light/dark theme
-- Fixed the HUD panel so its visible bounds match the SteamVR overlay bounds
-- Added a HUD panel size slider, moved the default HUD distance closer, and made wrist mode smaller by default
-
 ## Requirements
 
 - Windows 10/11
