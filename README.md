@@ -17,13 +17,6 @@ VR Performance Profiler 是一个独立的 SteamVR/OpenVR 覆盖层性能监控�
 - 设置界面主题：深浅主题会同步更新 Web 设置窗口内容和标题栏颜色
 - 单实例运行：重复启动会直接退出，避免多个托盘/桥接进程并存
 
-## v0.1.1 更新
-
-- 修复温度单位符号显示异常，覆盖层和相关传感器值统一显示为 `°C`
-- 修复设置窗口标题栏不跟随深色/浅色主题切换的问题
-- 修复 HUD 实际可见区域小于 SteamVR 覆盖层范围的问题
-- 新增 HUD 面板大小滑块，默认 HUD 距离更近，手腕模式默认尺寸更小
-
 ## 运行要求
 
 - Windows 10/11 x64
@@ -59,16 +52,7 @@ LibreHardwareMonitor bridge 会把快照写入：
 VRPerformanceProfiler-<version>-Setup.exe
 ```
 
-安装器会：
-
-- 允许用户选择安装位置
-- 默认安装到 `%LOCALAPPDATA%\Programs\VR Performance Profiler`
-- 如果选择的目录不是 `VR Performance Profiler`，会在该目录下创建产品子目录
-- 安装主程序、OpenVR DLL、WebView2 loader、自包含的 LibreHardwareMonitor bridge
-- 创建桌面快捷方式、开始菜单快捷方式和卸载项
-- 安装完成后启动程序
-
-卸载器只删除安装清单记录的文件，不会递归删除用户选择的整个目录。
+自制的安装器被微软制裁了，在更新到官方的正常安装方式前不提供安装包进行安装
 
 ## 便携版
 
