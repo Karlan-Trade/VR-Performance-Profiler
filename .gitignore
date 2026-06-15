@@ -7,6 +7,7 @@ dist/
 .appdata/
 .dotnet-home/
 .nuget-packages/
+.tools/
 .codex-tmp-*/
 
 # IDE

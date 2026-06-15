@@ -17,6 +17,18 @@ VR Performance Profiler 是一个独立的 SteamVR/OpenVR 覆盖层性能监控�
 - 设置界面主题：深浅主题会同步更新 Web 设置窗口内容和标题栏颜色
 - 单实例运行：重复启动会直接退出，避免多个托盘/桥接进程并存
 
+## v0.1.2 更新
+
+- 安装包改为 Inno Setup 生成，替换旧的自制 C# 自解压安装器，降低安全软件误报概率
+- 安装器仍支持自定义安装目录、开始菜单快捷方式、可选桌面快捷方式和标准卸载项
+
+## v0.1.1 更新
+
+- 修复温度单位符号显示异常，覆盖层和相关传感器值统一显示为 `°C`
+- 修复设置窗口标题栏不跟随深色/浅色主题切换的问题
+- 修复 HUD 实际可见区域小于 SteamVR 覆盖层范围的问题
+- 新增 HUD 面板大小滑块，默认 HUD 距离更近，手腕模式默认尺寸更小
+
 ## 运行要求
 
 - Windows 10/11 x64
@@ -52,7 +64,16 @@ LibreHardwareMonitor bridge 会把快照写入：
 VRPerformanceProfiler-<version>-Setup.exe
 ```
 
-自制的安装器被微软制裁了，在更新到官方的正常安装方式前不提供安装包进行安装
+安装器会：
+
+- 允许用户选择安装位置
+- 默认安装到 `%LOCALAPPDATA%\Programs\VR Performance Profiler`
+- 如果选择的目录不是 `VR Performance Profiler`，会在该目录下创建产品子目录
+- 安装主程序、OpenVR DLL、WebView2 loader、自包含的 LibreHardwareMonitor bridge
+- 创建开始菜单快捷方式、可选桌面快捷方式和标准卸载项
+- 安装完成后可选择启动程序
+
+安装器由 Inno Setup 生成，不再使用旧的自制 C# 自解压安装器。卸载由 Inno Setup 标准卸载器处理。
 
 ## 便携版
 
@@ -104,6 +125,7 @@ VRPerformanceProfiler-<version>-portable.zip
 2. Visual Studio 2022，安装 C++ Desktop Development 工作负载
 3. .NET 8 SDK 或更高版本
 4. SteamVR/OpenVR 运行环境
+5. Inno Setup 6，用于构建安装器；只构建便携 ZIP 时可不安装
 
 示例：
 
@@ -129,6 +151,7 @@ dist\
 ```
 
 打包脚本会生成安装器和便携 ZIP。安装器不会打包 SteamVR。
+安装器由 Inno Setup 6 生成；构建安装器时需要本机安装 Inno Setup 并确保 `ISCC.exe` 在 PATH 中或位于默认安装目录。若只需要便携 ZIP，可添加 `-SkipInstallerExe`。
 
 ## 反作弊边界
 
