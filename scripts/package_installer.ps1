@@ -103,7 +103,6 @@ New-Item -ItemType Directory -Force -Path $appPayload, $installerWork | Out-Null
 
 Copy-RequiredFile -Source (Join-Path $buildPath "vr_perf_profiler.exe") -Destination $appPayload
 Copy-RequiredFile -Source (Join-Path $buildPath "openvr_api.dll") -Destination $appPayload
-Copy-RequiredFile -Source (Join-Path $repoRoot "README.md") -Destination $appPayload
 Copy-RequiredFile -Source (Join-Path $repoRoot "LICENSE") -Destination $appPayload
 Copy-RequiredFile -Source (Join-Path $repoRoot "THIRD_PARTY_NOTICES.md") -Destination $appPayload
 
