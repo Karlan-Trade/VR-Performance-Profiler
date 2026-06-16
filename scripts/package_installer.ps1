@@ -191,6 +191,9 @@ if (-not $SkipInstallerExe -and -not $SkipMsi) {
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <ui:WixUI Id="WixUI_InstallDir" />
     <WixVariable Id="WixUILicenseRtf" Value="$escapedLicenseRtf" />
+    <InstallExecuteSequence>
+      <DisableRollback Before="InstallInitialize" />
+    </InstallExecuteSequence>
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="LocalProgramsFolder" Name="Programs">
