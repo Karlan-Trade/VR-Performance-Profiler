@@ -22,6 +22,7 @@ public:
 
     // HUD position (angles in degrees, distance in meters)
     void SetHudPosition(float yawDeg, float pitchDeg, float distance);
+    void SetOverlayOffset(float x, float y, float z);
 
     // Wrist settings
     void SetWristHand(bool isLeft);
@@ -40,6 +41,9 @@ private:
     float hudYaw_ = 0.0f;
     float hudPitch_ = -15.0f;
     float hudDistance_ = 1.0f;
+    float offsetX_ = 0.0f;
+    float offsetY_ = 0.0f;
+    float offsetZ_ = 0.0f;
 
     bool isLeftHand_ = true;
 };

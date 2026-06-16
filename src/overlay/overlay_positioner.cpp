@@ -132,6 +132,13 @@ void OverlayPositioner::SetHudPosition(float yawDeg, float pitchDeg, float dista
     hudDistance_ = distance;
 }
 
+void OverlayPositioner::SetOverlayOffset(float x, float y, float z)
+{
+    offsetX_ = x;
+    offsetY_ = y;
+    offsetZ_ = z;
+}
+
 void OverlayPositioner::SetWristHand(bool isLeft)
 {
     isLeftHand_ = isLeft;
@@ -149,8 +156,9 @@ vr::HmdMatrix34_t OverlayPositioner::MakeHudTransform() const
     // Translation: -Z is forward in OpenVR
     vr::HmdMatrix34_t m;
     m.m[0][0] = cy;      m.m[0][1] = 0;     m.m[0][2] = -sy;     m.m[0][3] = 0;
-    m.m[1][0] = sy * sp;  m.m[1][1] = cp;    m.m[1][2] = cy * sp; m.m[1][3] = -0.3f;
-    m.m[2][0] = sy * cp;  m.m[2][1] = -sp;   m.m[2][2] = cy * cp; m.m[2][3] = -hudDistance_;
+    m.m[1][0] = sy * sp;  m.m[1][1] = cp;    m.m[1][2] = cy * sp; m.m[1][3] = -0.3f + offsetY_;
+    m.m[2][0] = sy * cp;  m.m[2][1] = -sp;   m.m[2][2] = cy * cp; m.m[2][3] = -hudDistance_ + offsetZ_;
+    m.m[0][3] = offsetX_;
 
     return m;
 }
@@ -168,7 +176,7 @@ vr::HmdMatrix34_t OverlayPositioner::MakeWristTransform() const
     matrix = Multiply(matrix, RotationX(rotX));
     matrix = Multiply(matrix, RotationY(rotY));
     matrix = Multiply(matrix, RotationZ(rotZ));
-    matrix = Multiply(matrix, Translation(x, y, z));
+    matrix = Multiply(matrix, Translation(x + offsetX_, y + offsetY_, z + offsetZ_));
     return ToOpenVrMatrix(matrix);
 }
 

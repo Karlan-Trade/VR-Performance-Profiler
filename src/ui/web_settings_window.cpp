@@ -25,6 +25,35 @@ namespace {
 constexpr UINT_PTR kRefreshTimerId = 41;
 constexpr UINT kRefreshIntervalMs = 1000;
 constexpr DWORD kDwmwaUseImmersiveDarkModeBefore20H1 = 19;
+constexpr int kInitialWindowWidthDip = 1120;
+constexpr int kInitialWindowHeightDip = 740;
+constexpr UINT kMsgConnectSteamVrDone = WM_APP + 41;
+constexpr UINT_PTR kConnectTimeoutTimerId = 42;
+constexpr UINT kConnectTimeoutMs = 15000;
+
+int ScaleForDpi(int value, UINT dpi)
+{
+    return MulDiv(value, static_cast<int>(dpi), 96);
+}
+
+UINT DpiForWindow(HWND hwnd)
+{
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (user32) {
+        using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+        auto getDpiForWindow = reinterpret_cast<GetDpiForWindowFn>(
+            GetProcAddress(user32, "GetDpiForWindow"));
+        if (getDpiForWindow) {
+            return getDpiForWindow(hwnd);
+        }
+    }
+    HDC dc = GetDC(hwnd);
+    const UINT dpi = dc ? static_cast<UINT>(GetDeviceCaps(dc, LOGPIXELSX)) : 96;
+    if (dc) {
+        ReleaseDC(hwnd, dc);
+    }
+    return dpi > 0 ? dpi : 96;
+}
 
 std::wstring ToWide(const std::string& text)
 {
@@ -317,6 +346,14 @@ bool WebSettingsWindow::CreateHostWindow(HWND ownerHwnd)
     wc.lpszClassName = L"VRPerfProfilerWebSettings";
     RegisterClassExW(&wc);
 
+    HDC screenDc = GetDC(nullptr);
+    const UINT initialDpi = screenDc
+        ? static_cast<UINT>(GetDeviceCaps(screenDc, LOGPIXELSX))
+        : 96;
+    if (screenDc) {
+        ReleaseDC(nullptr, screenDc);
+    }
+
     hwnd_ = CreateWindowExW(
         0,
         wc.lpszClassName,
@@ -324,8 +361,8 @@ bool WebSettingsWindow::CreateHostWindow(HWND ownerHwnd)
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        1120,
-        740,
+        ScaleForDpi(kInitialWindowWidthDip, initialDpi),
+        ScaleForDpi(kInitialWindowHeightDip, initialDpi),
         nullptr,
         nullptr,
         wc.hInstance,
@@ -475,13 +512,46 @@ LRESULT WebSettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
     case WM_SIZE:
         ResizeWebView();
         return 0;
+    case WM_DPICHANGED:
+        if (lParam) {
+            auto* suggestedRect = reinterpret_cast<RECT*>(lParam);
+            SetWindowPos(
+                hwnd,
+                nullptr,
+                suggestedRect->left,
+                suggestedRect->top,
+                suggestedRect->right - suggestedRect->left,
+                suggestedRect->bottom - suggestedRect->top,
+                SWP_NOZORDER | SWP_NOACTIVATE);
+        } else {
+            const UINT dpi = DpiForWindow(hwnd);
+            SetWindowPos(
+                hwnd,
+                nullptr,
+                0,
+                0,
+                ScaleForDpi(kInitialWindowWidthDip, dpi),
+                ScaleForDpi(kInitialWindowHeightDip, dpi),
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        ResizeWebView();
+        return 0;
     case WM_TIMER:
         if (wParam == kRefreshTimerId) {
             RefreshReadings();
             SendState();
             return 0;
+        } else if (wParam == kConnectTimeoutTimerId) {
+            KillTimer(hwnd, kConnectTimeoutTimerId);
+            if (connectInProgress_) {
+                FinishConnectSteamVr(false);
+            }
+            return 0;
         }
         break;
+    case kMsgConnectSteamVrDone:
+        FinishConnectSteamVr(wParam != 0);
+        return 0;
     case WM_CLOSE:
         closed_ = true;
         DestroyWindow(hwnd);
@@ -519,17 +589,15 @@ void WebSettingsWindow::OnWebMessage(const std::wstring& messageJson)
         SendStatus("settingsApplied", true);
         SendState();
     } else if (type == "connect") {
-        ApplyFromJson(messageJson);
-        const bool ok = connectCallback_ && connectCallback_();
-        SendStatus(ok ? "steamVrConnected" : "steamVrConnectFailed", ok);
-        SendState();
+        ApplyFromJson(messageJson, false);
+        StartConnectSteamVr();
     } else if (type == "close") {
         closed_ = true;
         DestroyWindow(hwnd_);
     }
 }
 
-void WebSettingsWindow::ApplyFromJson(const std::wstring& messageJson)
+void WebSettingsWindow::ApplyFromJson(const std::wstring& messageJson, bool applyRuntime)
 {
     nlohmann::json message;
     try {
@@ -543,6 +611,18 @@ void WebSettingsWindow::ApplyFromJson(const std::wstring& messageJson)
         message.value("overlayWidthMeters", tempConfig_.overlay.widthMeters),
         0.5f,
         2.5f);
+    tempConfig_.overlay.offsetX = (std::clamp)(
+        message.value("offsetX", tempConfig_.overlay.offsetX),
+        -1.0f,
+        1.0f);
+    tempConfig_.overlay.offsetY = (std::clamp)(
+        message.value("offsetY", tempConfig_.overlay.offsetY),
+        -1.0f,
+        1.0f);
+    tempConfig_.overlay.offsetZ = (std::clamp)(
+        message.value("offsetZ", tempConfig_.overlay.offsetZ),
+        -1.0f,
+        1.0f);
     const auto wristHand = message.value("wristHand", tempConfig_.wrist.hand);
     tempConfig_.wrist.hand = wristHand == "right" ? "right" : "left";
     tempConfig_.appearance.theme = message.value("theme", tempConfig_.appearance.theme);
@@ -570,7 +650,7 @@ void WebSettingsWindow::ApplyFromJson(const std::wstring& messageJson)
 
     *config_ = tempConfig_;
     config_->Save();
-    if (applyCallback_) {
+    if (applyRuntime && applyCallback_) {
         applyCallback_();
     }
 }
@@ -602,6 +682,40 @@ void WebSettingsWindow::SendStatus(const std::string& message, bool ok)
     impl_->webview->PostWebMessageAsJson(JsonToWide(payload).c_str());
 }
 
+void WebSettingsWindow::StartConnectSteamVr()
+{
+    if (connectInProgress_) {
+        return;
+    }
+
+    connectInProgress_ = true;
+    SendStatus("connectingSteamVr", true);
+    SetTimer(hwnd_, kConnectTimeoutTimerId, kConnectTimeoutMs, nullptr);
+
+    HWND resultWindow = hwnd_;
+    if (connectCallback_) {
+        connectCallback_([resultWindow](bool ok) {
+            if (resultWindow && IsWindow(resultWindow)) {
+                PostMessage(resultWindow, kMsgConnectSteamVrDone, ok ? 1 : 0, 0);
+            }
+        });
+    } else {
+        FinishConnectSteamVr(false);
+    }
+}
+
+void WebSettingsWindow::FinishConnectSteamVr(bool ok)
+{
+    if (!connectInProgress_) {
+        return;
+    }
+
+    connectInProgress_ = false;
+    KillTimer(hwnd_, kConnectTimeoutTimerId);
+    SendStatus(ok ? "steamVrConnected" : "steamVrConnectFailed", ok);
+    SendState();
+}
+
 std::wstring WebSettingsWindow::BuildStateJson() const
 {
     nlohmann::json payload = {
@@ -631,6 +745,9 @@ std::wstring WebSettingsWindow::BuildConfigJson() const
     nlohmann::json config = {
         {"mode", tempConfig_.overlay.mode},
         {"overlayWidthMeters", tempConfig_.overlay.widthMeters},
+        {"offsetX", tempConfig_.overlay.offsetX},
+        {"offsetY", tempConfig_.overlay.offsetY},
+        {"offsetZ", tempConfig_.overlay.offsetZ},
         {"wristHand", tempConfig_.wrist.hand},
         {"theme", tempConfig_.appearance.theme},
         {"language", tempConfig_.general.language},
@@ -738,6 +855,10 @@ std::wstring WebSettingsWindow::BuildHtml() const
     .seg { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:4px; background:var(--seg); border:1px solid var(--line); border-radius:8px; }
     .seg button, .button { border:1px solid var(--line); background:var(--control2); color:var(--text); border-radius:6px; height:34px; padding:0 12px; cursor:pointer; }
     .seg button.active { border-color:var(--accent); background:var(--segActive); }
+    .sectionHead { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:22px 0 10px; }
+    .sectionHead h2 { margin:0; }
+    .miniButton { border:1px solid var(--line); background:var(--control2); color:var(--text); border-radius:6px; height:26px; padding:0 8px; cursor:pointer; font-size:12px; }
+    .miniButton:hover { background:var(--hover); }
     label { display:block; color:var(--muted); margin:12px 0 6px; }
     select { width:100%; height:34px; border-radius:6px; border:1px solid var(--line); background:var(--control); color:var(--text); padding:0 10px; }
     input[type=range] { width:100%; accent-color:var(--accent); }
@@ -778,6 +899,25 @@ std::wstring WebSettingsWindow::BuildHtml() const
         <input id="panelSize" type="range" min="0.5" max="2.5" step="0.05">
         <span id="panelSizeValue" class="valueBadge">1.50 m</span>
       </div>
+      <div class="sectionHead">
+        <h2 id="offsetHeading">Offset</h2>
+        <button class="miniButton" id="resetLayout">Reset</button>
+      </div>
+      <label id="offsetXLabel" for="offsetX">X axis</label>
+      <div class="rangeRow">
+        <input id="offsetX" type="range" min="-1" max="1" step="0.01">
+        <span id="offsetXValue" class="valueBadge">+0.00 m</span>
+      </div>
+      <label id="offsetYLabel" for="offsetY">Y axis</label>
+      <div class="rangeRow">
+        <input id="offsetY" type="range" min="-1" max="1" step="0.01">
+        <span id="offsetYValue" class="valueBadge">+0.00 m</span>
+      </div>
+      <label id="offsetZLabel" for="offsetZ">Z axis</label>
+      <div class="rangeRow">
+        <input id="offsetZ" type="range" min="-1" max="1" step="0.01">
+        <span id="offsetZValue" class="valueBadge">+0.00 m</span>
+      </div>
       <h2 id="appearanceHeading">Appearance</h2>
       <label id="themeLabel" for="theme">Theme</label>
       <select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select>
@@ -800,25 +940,29 @@ std::wstring WebSettingsWindow::BuildHtml() const
     </main>
   </div>
   <script>
-    const state = { config:{mode:'hud', overlayWidthMeters:1.5, wristHand:'left', theme:'dark', language:'zh', hardwareSource:'afterburner', selectedKeys:[]}, readings:[], filter:'', initialized:false, statusMessage:'', statusOk:null };
+    const state = { config:{mode:'hud', overlayWidthMeters:1.5, offsetX:0, offsetY:0, offsetZ:0, wristHand:'left', theme:'dark', language:'zh', hardwareSource:'afterburner', selectedKeys:[]}, readings:[], filter:'', initialized:false, statusMessage:'', statusOk:null };
     const $ = id => document.getElementById(id);
     const strings = {
       en: {
-        title:'VR Performance Profiler', overlayHeading:'Overlay', appearanceHeading:'Appearance', dataHeading:'Data',
-        hud:'HUD', wrist:'Wrist', wristHand:'Wrist hand', leftHand:'Left', rightHand:'Right', panelSize:'HUD panel size', theme:'Theme', language:'Language', themeDark:'Dark', themeLight:'Light',
+        title:'VR Performance Profiler', overlayHeading:'Overlay', offsetHeading:'Offset', appearanceHeading:'Appearance', dataHeading:'Data',
+        hud:'HUD', wrist:'Wrist', wristHand:'Wrist hand', leftHand:'Left', rightHand:'Right', panelSize:'HUD panel size', offsetX:'X axis', offsetY:'Y axis', offsetZ:'Z axis', theme:'Theme', language:'Language', themeDark:'Dark', themeLight:'Light',
+        resetLayout:'Reset',
         langZh:'Chinese', langEn:'English', hardwareSource:'Primary data source', afterburner:'MSI Afterburner', hwinfo:'HWiNFO', interval:'Update interval', apply:'Apply', connect:'Connect SteamVR',
         sensors:'Detected Sensors', sensorHint:'Select exact readings to show in the VR overlay.', filter:'Filter sensors',
         noRows:'No matching sensor data', metric:'Metric', device:'Device', value:'Value', source:'Source', rawLabel:'Raw Label',
         settingsApplied:'Settings applied', steamVrConnected:'SteamVR overlay connected',
+        connectingSteamVr:'Connecting SteamVR...',
         steamVrConnectFailed:'SteamVR is not running or overlay connection failed'
       },
       zh: {
-        title:'VR Performance Profiler', overlayHeading:'\u8986\u76D6', appearanceHeading:'\u754C\u9762', dataHeading:'\u6570\u636E',
-        hud:'HUD', wrist:'\u624B\u8155', wristHand:'\u624B\u8155\u4F4D\u7F6E', leftHand:'\u5DE6\u624B', rightHand:'\u53F3\u624B', panelSize:'HUD \u9762\u677F\u5927\u5C0F', theme:'\u4E3B\u9898', language:'\u8BED\u8A00', themeDark:'\u6DF1\u8272', themeLight:'\u6D45\u8272',
+        title:'VR Performance Profiler', overlayHeading:'\u8986\u76D6', offsetHeading:'\u504F\u79FB', appearanceHeading:'\u754C\u9762', dataHeading:'\u6570\u636E',
+        hud:'HUD', wrist:'\u624B\u8155', wristHand:'\u624B\u8155\u4F4D\u7F6E', leftHand:'\u5DE6\u624B', rightHand:'\u53F3\u624B', panelSize:'HUD \u9762\u677F\u5927\u5C0F', offsetX:'X \u8F74', offsetY:'Y \u8F74', offsetZ:'Z \u8F74', theme:'\u4E3B\u9898', language:'\u8BED\u8A00', themeDark:'\u6DF1\u8272', themeLight:'\u6D45\u8272',
+        resetLayout:'\u91CD\u7F6E',
         langZh:'\u4E2D\u6587', langEn:'English', hardwareSource:'\u4E3B\u6570\u636E\u6765\u6E90', afterburner:'MSI Afterburner', hwinfo:'HWiNFO', interval:'\u66F4\u65B0\u95F4\u9694', apply:'\u5E94\u7528', connect:'\u8FDE\u63A5 SteamVR',
         sensors:'\u68C0\u6D4B\u5230\u7684\u4F20\u611F\u5668', sensorHint:'\u9009\u62E9\u8981\u663E\u793A\u5728 VR \u8986\u76D6\u4E2D\u7684\u5177\u4F53\u8BFB\u6570\u3002', filter:'\u8FC7\u6EE4\u4F20\u611F\u5668',
         noRows:'\u6CA1\u6709\u5339\u914D\u7684\u4F20\u611F\u5668\u6570\u636E', metric:'\u7C7B\u578B', device:'GPU / \u8BBE\u5907', value:'\u6570\u503C', source:'\u6765\u6E90', rawLabel:'\u539F\u59CB\u6807\u7B7E',
         settingsApplied:'\u8BBE\u7F6E\u5DF2\u5E94\u7528', steamVrConnected:'SteamVR \u8986\u76D6\u8FDE\u63A5\u6210\u529F',
+        connectingSteamVr:'\u6B63\u5728\u8FDE\u63A5 SteamVR...',
         steamVrConnectFailed:'SteamVR \u672A\u542F\u52A8\u6216\u8986\u76D6\u8FDE\u63A5\u5931\u8D25'
       }
     };
@@ -829,6 +973,9 @@ std::wstring WebSettingsWindow::BuildHtml() const
       return {
         mode: state.config.mode,
         overlayWidthMeters: Number($('panelSize').value),
+        offsetX: Number($('offsetX').value),
+        offsetY: Number($('offsetY').value),
+        offsetZ: Number($('offsetZ').value),
         wristHand: state.config.wristHand || 'left',
         theme: $('theme').value,
         language: $('language').value,
@@ -853,6 +1000,11 @@ std::wstring WebSettingsWindow::BuildHtml() const
       setText('handLeft', t('leftHand'));
       setText('handRight', t('rightHand'));
       setText('panelSizeLabel', t('panelSize'));
+      setText('offsetHeading', t('offsetHeading'));
+      setText('offsetXLabel', t('offsetX'));
+      setText('offsetYLabel', t('offsetY'));
+      setText('offsetZLabel', t('offsetZ'));
+      setText('resetLayout', t('resetLayout'));
       setText('themeLabel', t('theme'));
       setText('languageLabel', t('language'));
       setText('hardwareSourceLabel', t('hardwareSource'));
@@ -868,6 +1020,7 @@ std::wstring WebSettingsWindow::BuildHtml() const
       $('language').querySelector('option[value="en"]').textContent = t('langEn');
       $('hardwareSource').querySelector('option[value="afterburner"]').textContent = t('afterburner');
       $('hardwareSource').querySelector('option[value="hwinfo"]').textContent = t('hwinfo');
+      $('connect').disabled = state.statusMessage === 'connectingSteamVr';
       renderStatus();
     }
     function renderStatus(){
@@ -878,6 +1031,7 @@ std::wstring WebSettingsWindow::BuildHtml() const
     function setStatus(message, ok){
       state.statusMessage = message || '';
       state.statusOk = ok;
+      $('connect').disabled = state.statusMessage === 'connectingSteamVr';
       renderStatus();
     }
     function render(){
@@ -888,6 +1042,15 @@ std::wstring WebSettingsWindow::BuildHtml() const
       const panelSize = Math.min(2.5, Math.max(0.5, Number(state.config.overlayWidthMeters || 1.5)));
       $('panelSize').value = panelSize.toFixed(2);
       $('panelSizeValue').textContent = `${panelSize.toFixed(2)} m`;
+      const offsets = {
+        offsetX: clampOffset(state.config.offsetX),
+        offsetY: clampOffset(state.config.offsetY),
+        offsetZ: clampOffset(state.config.offsetZ)
+      };
+      for (const [id, value] of Object.entries(offsets)) {
+        $(id).value = value.toFixed(2);
+        $(`${id}Value`).textContent = `${value >= 0 ? '+' : ''}${value.toFixed(2)} m`;
+      }
       $('theme').value = state.config.theme || 'dark';
       $('language').value = state.config.language || 'zh';
       $('hardwareSource').value = state.config.hardwareSource === 'hwinfo' ? 'hwinfo' : 'afterburner';
@@ -900,17 +1063,33 @@ std::wstring WebSettingsWindow::BuildHtml() const
       if (!rows.length) { $('table').innerHTML = `<div class="empty">${esc(t('noRows'))}</div>`; return; }
       $('table').innerHTML = `<table><thead><tr><th></th><th>${esc(t('metric'))}</th><th>${esc(t('device'))}</th><th>${esc(t('value'))}</th><th>${esc(t('source'))}</th><th>${esc(t('rawLabel'))}</th></tr></thead><tbody>${rows.map(r => `<tr><td><input type="checkbox" value="${esc(r.key)}" ${selected.has(r.key)?'checked':''}></td><td>${esc(r.categoryName)}</td><td>${esc(r.device||'')}</td><td>${esc(r.value)}</td><td>${esc(r.source||'')}</td><td>${esc(r.label||'')}</td></tr>`).join('')}</tbody></table>`;
     }
+    function clampOffset(value){ return Math.min(1, Math.max(-1, Number(value || 0))); }
     function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     $('modeHud').onclick=()=>{state.config.mode='hud'; render();};
     $('modeWrist').onclick=()=>{state.config.mode='wrist'; render();};
     $('handLeft').onclick=()=>{state.config.wristHand='left'; state.config.mode='wrist'; render();};
     $('handRight').onclick=()=>{state.config.wristHand='right'; state.config.mode='wrist'; render();};
     $('panelSize').oninput=e=>{state.config.overlayWidthMeters=Number(e.target.value); render();};
+    $('offsetX').oninput=e=>{state.config.offsetX=Number(e.target.value); render();};
+    $('offsetY').oninput=e=>{state.config.offsetY=Number(e.target.value); render();};
+    $('offsetZ').oninput=e=>{state.config.offsetZ=Number(e.target.value); render();};
+    $('resetLayout').onclick=()=>{
+      state.config.overlayWidthMeters = 1.5;
+      state.config.offsetX = 0;
+      state.config.offsetY = 0;
+      state.config.offsetZ = 0;
+      render();
+    };
     $('theme').onchange=e=>{state.config.theme=e.target.value; render(); post('previewTheme');};
     $('language').onchange=e=>{state.config.language=e.target.value; render();};
     $('hardwareSource').onchange=e=>{state.config.hardwareSource=e.target.value; post('refresh'); render();};
     $('apply').onclick=()=>post('apply');
-    $('connect').onclick=()=>post('connect');
+    $('connect').onclick=()=>{
+      if ($('connect').disabled) {
+        return;
+      }
+      post('connect');
+    };
     $('filter').oninput=e=>{state.filter=e.target.value; render();};
     chrome.webview.addEventListener('message', ev => {
       const msg = ev.data;
@@ -920,6 +1099,9 @@ std::wstring WebSettingsWindow::BuildHtml() const
         if (current) {
           state.config.mode = current.mode;
           state.config.overlayWidthMeters = current.overlayWidthMeters;
+          state.config.offsetX = current.offsetX;
+          state.config.offsetY = current.offsetY;
+          state.config.offsetZ = current.offsetZ;
           state.config.wristHand = current.wristHand;
           state.config.theme = current.theme;
           state.config.language = current.language;

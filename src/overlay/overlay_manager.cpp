@@ -32,6 +32,15 @@ bool OverlayManager::Initialize()
     }
 
     overlay_ = vr::VROverlay();
+    return AttachInitializedSession();
+}
+
+bool OverlayManager::AttachInitializedSession()
+{
+    if (initialized_) return true;
+
+    system_ = vr::VRSystem();
+    overlay_ = vr::VROverlay();
     if (!overlay_) {
         LogInfo("OpenVR init failed: VROverlay interface is null");
         std::cerr << "Failed to get IVROverlay interface" << std::endl;

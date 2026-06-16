@@ -13,6 +13,8 @@
 #include "vr/openvr_frame_timing.h"
 
 #include <Windows.h>
+#include <atomic>
+#include <functional>
 
 namespace vrperf {
 
@@ -46,7 +48,9 @@ private:
     void ApplyOverlayTransform();
     void ApplyRuntimeConfig();
     bool ConnectSteamVrOverlay(HWND ownerHwnd, bool showMessage);
+    void ConnectSteamVrOverlayAsync(std::function<void(bool)> completion);
     bool TryInitializeOverlay();
+    bool CompleteInitializedOverlay();
     void OpenSettings();
     void UpdateTrayTooltip();
 
@@ -54,6 +58,7 @@ private:
     HWND hwnd_ = nullptr;
     UINT_PTR timerId_ = 1;
     static constexpr UINT WM_TRAYICON = WM_APP + 1;
+    static constexpr UINT WM_STEAMVR_INIT_DONE = WM_APP + 2;
 
     // Hotkey IDs
     static constexpr int HOTKEY_TOGGLE_VIS = 1;
@@ -72,6 +77,10 @@ private:
     TrayIcon trayIcon_;
 
     bool running_ = false;
+    std::atomic_bool connectingSteamVr_ = false;
+    std::atomic_bool steamVrInitThreadActive_ = false;
+    DWORD connectingSteamVrStartedMs_ = 0;
+    std::function<void(bool)> pendingSteamVrConnectCompletion_;
     DWORD lastOverlayRetryMs_ = 0;
 };
 

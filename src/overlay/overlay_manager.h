@@ -14,6 +14,9 @@ public:
     // Initialize OpenVR as an overlay application
     bool Initialize();
 
+    // Attach to an OpenVR session after VR_Init has already completed.
+    bool AttachInitializedSession();
+
     // Shutdown OpenVR
     void Shutdown();
 

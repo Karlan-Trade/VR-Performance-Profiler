@@ -39,6 +39,8 @@ CTestTestfile.cmake
 # Compiled
 **/bin/
 **/obj/
+tools/**/bin/
+tools/**/obj/
 *.obj
 *.o
 *.exe

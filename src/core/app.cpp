@@ -4,14 +4,19 @@
 #include "ui/web_settings_window.h"
 
 #include <algorithm>
+#include <atomic>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <string>
+#include <thread>
 #include <TlHelp32.h>
 
 namespace vrperf {
 
 namespace {
+constexpr DWORD kSteamVrConnectTimeoutMs = 15000;
 
 bool HasExactMetricSelection(const Config& config)
 {
@@ -92,6 +97,99 @@ bool IsProcessRunning(const wchar_t* processName)
 bool IsSteamVrRunning()
 {
     return IsProcessRunning(L"vrserver.exe");
+}
+
+std::wstring ExecutableDirectory()
+{
+    std::wstring path(MAX_PATH, L'\0');
+    DWORD size = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+    while (size == path.size() && GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+        path.resize(path.size() * 2);
+        size = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+    }
+    if (size == 0) {
+        return L".";
+    }
+
+    path.resize(size);
+    const auto slash = path.find_last_of(L"\\/");
+    return slash == std::wstring::npos ? L"." : path.substr(0, slash);
+}
+
+std::string NarrowForLog(const std::wstring& text)
+{
+    if (text.empty()) {
+        return {};
+    }
+
+    const int size = WideCharToMultiByte(
+        CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+    if (size <= 0) {
+        return "<wide string conversion failed>";
+    }
+
+    std::string result(static_cast<size_t>(size), '\0');
+    WideCharToMultiByte(
+        CP_UTF8, 0, text.data(), static_cast<int>(text.size()), result.data(), size, nullptr, nullptr);
+    return result;
+}
+
+bool RunSteamVrInitProbe(DWORD timeoutMs)
+{
+    const auto exeDir = ExecutableDirectory();
+    const auto probePath = exeDir + L"\\vr_perf_vr_init_probe.exe";
+    if (GetFileAttributesW(probePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        LogInfo("App SteamVR readiness probe missing: " + NarrowForLog(probePath));
+        return false;
+    }
+
+    std::wstring commandLine = L"\"" + probePath + L"\"";
+    STARTUPINFOW startupInfo = {};
+    startupInfo.cb = sizeof(startupInfo);
+    PROCESS_INFORMATION processInfo = {};
+
+    LogInfo("App SteamVR readiness probe: start");
+    if (!CreateProcessW(
+            probePath.c_str(),
+            commandLine.data(),
+            nullptr,
+            nullptr,
+            FALSE,
+            CREATE_NO_WINDOW,
+            nullptr,
+            exeDir.c_str(),
+            &startupInfo,
+            &processInfo)) {
+        std::ostringstream ss;
+        ss << "App SteamVR readiness probe: CreateProcess failed error="
+           << GetLastError();
+        LogInfo(ss.str());
+        return false;
+    }
+
+    const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, timeoutMs);
+    bool ok = false;
+    if (waitResult == WAIT_OBJECT_0) {
+        DWORD exitCode = 1;
+        GetExitCodeProcess(processInfo.hProcess, &exitCode);
+        ok = exitCode == 0;
+        std::ostringstream ss;
+        ss << "App SteamVR readiness probe: exit=" << exitCode;
+        LogInfo(ss.str());
+    } else if (waitResult == WAIT_TIMEOUT) {
+        LogInfo("App SteamVR readiness probe: timeout waiting for VR_Init");
+        TerminateProcess(processInfo.hProcess, 2);
+        WaitForSingleObject(processInfo.hProcess, 3000);
+    } else {
+        std::ostringstream ss;
+        ss << "App SteamVR readiness probe: wait failed result="
+           << waitResult << " error=" << GetLastError();
+        LogInfo(ss.str());
+    }
+
+    CloseHandle(processInfo.hThread);
+    CloseHandle(processInfo.hProcess);
+    return ok;
 }
 
 ColorTheme ThemeFromName(const std::string& theme)
@@ -195,7 +293,10 @@ bool App::Initialize()
            << " hardwareSource=" << config_.data.hardwareSource
            << " width=" << config_.overlay.widthMeters
            << " hudDistance=" << config_.hud.distanceMeters
-           << " hudPitch=" << config_.hud.pitchDegrees;
+           << " hudPitch=" << config_.hud.pitchDegrees
+           << " offset=(" << config_.overlay.offsetX << ","
+           << config_.overlay.offsetY << ","
+           << config_.overlay.offsetZ << ")";
         LogInfo(ss.str());
     }
 
@@ -219,6 +320,10 @@ bool App::Initialize()
         config_.hud.yawDegrees,
         config_.hud.pitchDegrees,
         config_.hud.distanceMeters);
+    overlayPositioner_.SetOverlayOffset(
+        config_.overlay.offsetX,
+        config_.overlay.offsetY,
+        config_.overlay.offsetZ);
     overlayPositioner_.SetMode(config_.overlay.mode == "wrist"
         ? OverlayMode::Wrist
         : OverlayMode::HUD);
@@ -333,7 +438,22 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             ApplyOverlayTransform();
             return 0;
         case TRAY_MENU_CONNECT_VR:
-            ConnectSteamVrOverlay(hwnd_, true);
+            ConnectSteamVrOverlayAsync([this](bool connected) {
+                HWND messageOwner = IsWindowVisible(hwnd_) ? hwnd_ : nullptr;
+                MessageBoxW(
+                    messageOwner,
+                    connected
+                        ? AppText(config_.general.language,
+                                  L"SteamVR \u8986\u76D6\u8FDE\u63A5\u6210\u529F.",
+                                  L"SteamVR overlay connected.").c_str()
+                        : AppText(config_.general.language,
+                                  L"SteamVR \u8986\u76D6\u8FDE\u63A5\u5931\u8D25.\u8BF7\u5148\u542F\u52A8 SteamVR\uFF0C\u7136\u540E\u91CD\u8BD5.",
+                                  L"SteamVR overlay connection failed. Start SteamVR first, then retry.").c_str(),
+                    AppText(config_.general.language,
+                            L"SteamVR \u8FDE\u63A5",
+                            L"SteamVR Connection").c_str(),
+                    connected ? MB_OK | MB_ICONINFORMATION : MB_OK | MB_ICONWARNING);
+            });
             return 0;
         case TRAY_MENU_SETTINGS:
             OpenSettings();
@@ -347,6 +467,27 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_HOTKEY:
         OnHotkey(static_cast<int>(wParam));
         return 0;
+
+    case WM_STEAMVR_INIT_DONE: {
+        if (!connectingSteamVr_.load()) {
+            steamVrInitThreadActive_.store(false);
+            return 0;
+        }
+        bool connected = wParam != 0;
+        if (connected) {
+            connected = TryInitializeOverlay();
+        }
+        connectingSteamVr_.store(false);
+        steamVrInitThreadActive_.store(false);
+        connectingSteamVrStartedMs_ = 0;
+        UpdateTrayTooltip();
+        if (pendingSteamVrConnectCompletion_) {
+            auto completion = std::move(pendingSteamVrConnectCompletion_);
+            pendingSteamVrConnectCompletion_ = nullptr;
+            completion(connected);
+        }
+        return 0;
+    }
 
     case WM_DESTROY:
         if (hwnd == hwnd_) {
@@ -365,6 +506,20 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 void App::OnTimer()
 {
+    if (connectingSteamVr_.load()) {
+        const DWORD started = connectingSteamVrStartedMs_;
+        if (started != 0 && GetTickCount() - started >= kSteamVrConnectTimeoutMs) {
+            connectingSteamVr_.store(false);
+            connectingSteamVrStartedMs_ = 0;
+            LogInfo("App async SteamVR connect: timeout");
+            if (pendingSteamVrConnectCompletion_) {
+                auto completion = std::move(pendingSteamVrConnectCompletion_);
+                pendingSteamVrConnectCompletion_ = nullptr;
+                completion(false);
+            }
+        }
+    }
+
     if (overlayManager_.IsInitialized()) {
         // Poll OpenVR events
         overlayManager_.PollEvents();
@@ -410,6 +565,10 @@ void App::ApplyRuntimeConfig()
         config_.hud.yawDegrees,
         config_.hud.pitchDegrees,
         config_.hud.distanceMeters);
+    overlayPositioner_.SetOverlayOffset(
+        config_.overlay.offsetX,
+        config_.overlay.offsetY,
+        config_.overlay.offsetZ);
     overlayPositioner_.SetMode(config_.overlay.mode == "wrist"
         ? OverlayMode::Wrist
         : OverlayMode::HUD);
@@ -451,6 +610,39 @@ bool App::ConnectSteamVrOverlay(HWND ownerHwnd, bool showMessage)
     return connected;
 }
 
+void App::ConnectSteamVrOverlayAsync(std::function<void(bool)> completion)
+{
+    if (connectingSteamVr_.exchange(true) || steamVrInitThreadActive_.load()) {
+        if (completion) {
+            completion(false);
+        }
+        return;
+    }
+
+    pendingSteamVrConnectCompletion_ = std::move(completion);
+    connectingSteamVrStartedMs_ = GetTickCount();
+
+    if (overlayManager_.IsInitialized()) {
+        PostMessage(hwnd_, WM_STEAMVR_INIT_DONE, 1, 0);
+        return;
+    }
+
+    if (!IsSteamVrRunning()) {
+        LogInfo("App async SteamVR connect: vrserver.exe is not running");
+        PostMessage(hwnd_, WM_STEAMVR_INIT_DONE, 0, 0);
+        return;
+    }
+
+    HWND resultHwnd = hwnd_;
+    steamVrInitThreadActive_.store(true);
+    std::thread([resultHwnd]() {
+        const bool ready = RunSteamVrInitProbe(kSteamVrConnectTimeoutMs);
+        if (resultHwnd && IsWindow(resultHwnd)) {
+            PostMessage(resultHwnd, WM_STEAMVR_INIT_DONE, ready ? 1 : 0, 0);
+        }
+    }).detach();
+}
+
 bool App::TryInitializeOverlay()
 {
     lastOverlayRetryMs_ = GetTickCount();
@@ -471,11 +663,33 @@ bool App::TryInitializeOverlay()
         return false;
     }
 
+    return CompleteInitializedOverlay();
+}
+
+bool App::CompleteInitializedOverlay()
+{
+    if (overlayManager_.IsInitialized() && overlayManager_.GetHandle() != 0) {
+        overlayManager_.SetAlpha(config_.overlay.alpha);
+        ApplyOverlayTransform();
+        UpdateOverlay();
+        if (config_.overlay.visibleOnStart) {
+            overlayManager_.Show();
+        }
+        LogInfo("App CompleteInitializedOverlay: already initialized");
+        return true;
+    }
+
+    if (!overlayManager_.IsInitialized() &&
+        !overlayManager_.AttachInitializedSession()) {
+        LogInfo("App CompleteInitializedOverlay: attach failed");
+        return false;
+    }
+
     if (!overlayManager_.CreateOverlay(
             "vrperf.profiler.overlay",
             "VR Performance Profiler")) {
         overlayManager_.Shutdown();
-        LogInfo("App TryInitializeOverlay: CreateOverlay failed");
+        LogInfo("App CompleteInitializedOverlay: CreateOverlay failed");
         return false;
     }
 
@@ -488,7 +702,7 @@ bool App::TryInitializeOverlay()
         overlayManager_.Show();
     }
 
-    LogInfo("App TryInitializeOverlay: success");
+    LogInfo("App CompleteInitializedOverlay: success");
     return true;
 }
 
@@ -504,8 +718,8 @@ void App::OpenSettings()
         [this]() {
             ApplyRuntimeConfig();
         },
-        [this]() {
-            return ConnectSteamVrOverlay(hwnd_, false);
+        [this](std::function<void(bool)> completion) {
+            ConnectSteamVrOverlayAsync(std::move(completion));
         });
     if (openedWebSettings) {
         return;

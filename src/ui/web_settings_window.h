@@ -14,7 +14,7 @@ class WebSettingsWindow {
 public:
     using ReadingsProvider = std::function<std::vector<SensorReading>(const std::string&)>;
     using ApplyCallback = std::function<void()>;
-    using ConnectCallback = std::function<bool()>;
+    using ConnectCallback = std::function<void(std::function<void(bool)>)>;
 
     WebSettingsWindow();
     ~WebSettingsWindow();
@@ -37,7 +37,7 @@ private:
     void OnWebMessage(const std::wstring& messageJson);
     void SendState();
     void SendStatus(const std::string& message, bool ok);
-    void ApplyFromJson(const std::wstring& messageJson);
+    void ApplyFromJson(const std::wstring& messageJson, bool applyRuntime = true);
     void RefreshReadings();
 
     std::wstring BuildHtml() const;
@@ -48,6 +48,8 @@ private:
 
     MetricConfig MetricFromReading(const SensorReading& reading) const;
     bool IsReadingEnabled(const SensorReading& reading) const;
+    void StartConnectSteamVr();
+    void FinishConnectSteamVr(bool ok);
 
     HWND hwnd_ = nullptr;
     HWND ownerHwnd_ = nullptr;
@@ -59,6 +61,7 @@ private:
     std::vector<SensorReading> latestReadings_;
     bool closed_ = false;
     bool initFailed_ = false;
+    bool connectInProgress_ = false;
 
     struct Impl;
     Impl* impl_ = nullptr;

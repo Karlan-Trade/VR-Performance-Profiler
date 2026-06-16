@@ -99,7 +99,7 @@ std::string Config::GetDefaultPath()
 
 void Config::SetDefaults()
 {
-    version = 6;
+    version = 7;
     overlay = OverlayConfig{};
     hud = HudConfig{};
     wrist = WristConfig{};
@@ -141,6 +141,9 @@ void Config::FromJson(const nlohmann::json& j)
         overlay.updateIntervalMs = o.value("update_interval_ms", overlay.updateIntervalMs);
         overlay.visibleOnStart   = o.value("visible_on_start", overlay.visibleOnStart);
         overlay.autoConnectVr    = o.value("auto_connect_vr", overlay.autoConnectVr);
+        overlay.offsetX          = o.value("offset_x", overlay.offsetX);
+        overlay.offsetY          = o.value("offset_y", overlay.offsetY);
+        overlay.offsetZ          = o.value("offset_z", overlay.offsetZ);
     }
 
     // HUD
@@ -252,6 +255,10 @@ void Config::FromJson(const nlohmann::json& j)
         version = 6;
     }
 
+    if (loadedVersion < 7) {
+        version = 7;
+    }
+
     overlay.autoConnectVr = false;
 
     wrist.widthMeters = 0.75f;
@@ -275,7 +282,10 @@ nlohmann::json Config::ToJson() const
         {"alpha", overlay.alpha},
         {"update_interval_ms", overlay.updateIntervalMs},
         {"visible_on_start", overlay.visibleOnStart},
-        {"auto_connect_vr", overlay.autoConnectVr}
+        {"auto_connect_vr", overlay.autoConnectVr},
+        {"offset_x", overlay.offsetX},
+        {"offset_y", overlay.offsetY},
+        {"offset_z", overlay.offsetZ}
     };
 
     // HUD

@@ -20,8 +20,11 @@ int main()
         assert(config.overlay.mode == "hud");
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.overlay.alpha == 0.85f);
-        assert(config.version == 6);
+        assert(config.version == 7);
         assert(config.overlay.autoConnectVr == false);
+        assert(config.overlay.offsetX == 0.0f);
+        assert(config.overlay.offsetY == 0.0f);
+        assert(config.overlay.offsetZ == 0.0f);
         assert(config.hud.pitchDegrees == 0.0f);
         assert(config.hud.distanceMeters == 1.0f);
         assert(config.wrist.hand == "left");
@@ -44,6 +47,9 @@ int main()
         config.overlay.widthMeters = 1.25f;
         config.overlay.alpha = 0.9f;
         config.overlay.updateIntervalMs = 1000;
+        config.overlay.offsetX = 0.15f;
+        config.overlay.offsetY = -0.25f;
+        config.overlay.offsetZ = 0.35f;
         config.appearance.theme = "light";
         config.data.hardwareSource = "hwinfo";
         config.general.language = "en";
@@ -69,6 +75,9 @@ int main()
         assert(config2.overlay.widthMeters == 1.25f);
         assert(config2.overlay.alpha == 0.9f);
         assert(config2.overlay.updateIntervalMs == 1000);
+        assert(config2.overlay.offsetX == 0.15f);
+        assert(config2.overlay.offsetY == -0.25f);
+        assert(config2.overlay.offsetZ == 0.35f);
         assert(config2.appearance.theme == "light");
         assert(config2.data.hardwareSource == "hwinfo");
         assert(config2.general.language == "en");
@@ -101,6 +110,9 @@ int main()
         assert(j.contains("data"));
         assert(j.contains("general"));
         assert(j["overlay"]["width_meters"] == 1.25f);
+        assert(j["overlay"]["offset_x"] == 0.15f);
+        assert(j["overlay"]["offset_y"] == -0.25f);
+        assert(j["overlay"]["offset_z"] == 0.35f);
         assert(j["data"]["hardware_source"] == "hwinfo");
 
         assert(j["metrics"].is_array());
@@ -127,7 +139,7 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 6);
+        assert(config.version == 7);
         assert(config.overlay.autoConnectVr == false);
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.hud.pitchDegrees == 0.0f);
@@ -169,7 +181,7 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 6);
+        assert(config.version == 7);
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.hud.pitchDegrees == 0.0f);
         assert(config.hud.distanceMeters == 1.0f);
@@ -207,7 +219,7 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 6);
+        assert(config.version == 7);
         assert(config.overlay.autoConnectVr == false);
         assert(config.wrist.hand == "right");
         assert(config.wrist.widthMeters == 0.75f);
@@ -270,10 +282,41 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 6);
+        assert(config.version == 7);
         assert(config.hud.distanceMeters == 1.0f);
 
         std::cout << "[PASS] current HUD distance normalization passed" << std::endl;
+    }
+
+    // Test 9: stale wrist offsets stay ignored; shared overlay offsets start at
+    // the neutral baseline unless explicitly configured.
+    {
+        nlohmann::json oldConfig = {
+            {"version", 6},
+            {"wrist", {
+                {"offset_x", 0.11f},
+                {"offset_y", -0.22f},
+                {"offset_z", 0.33f}
+            }}
+        };
+
+        {
+            std::ofstream file(testPath);
+            file << oldConfig.dump(4);
+        }
+
+        vrperf::Config config;
+        config.Load(testPath);
+
+        assert(config.version == 7);
+        assert(config.overlay.offsetX == 0.0f);
+        assert(config.overlay.offsetY == 0.0f);
+        assert(config.overlay.offsetZ == 0.0f);
+        assert(config.wrist.offsetX == 0.0f);
+        assert(config.wrist.offsetY == 0.0f);
+        assert(config.wrist.offsetZ == 0.0f);
+
+        std::cout << "[PASS] v6 offset baseline migration passed" << std::endl;
     }
 
     // Cleanup
