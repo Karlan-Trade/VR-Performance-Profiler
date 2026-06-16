@@ -141,3 +141,7 @@ VR Performance Profiler 是独立 SteamVR 覆盖层应用：
 本项目使用 MIT License。详见 `LICENSE`。
 
 第三方依赖声明见 `THIRD_PARTY_NOTICES.md`。
+
+<p align="center">
+  <sub>本项目完全由 AI Agent 完成 · DeepSeek V4 Pro 10% ·Claude Opus 4.8 15% · GPT 5.5 75% </sub>
+</p>
