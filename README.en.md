@@ -9,9 +9,7 @@ A SteamVR overlay application that displays real-time system hardware monitoring
 - **Real-time hardware monitoring** — CPU/GPU usage, temperature, clock speeds, memory usage
 - **VR frame-rate monitoring** — FPS, frame interval, GPU frame time, headset refresh rate, and dropped frames from SteamVR compositor timing
 - **SteamVR overlay** — Displayed as a HUD (head-locked) or wrist-mounted overlay
-- **Default MSI Afterburner source** — Uses MSI Afterburner's hardware monitoring shared memory when available
-- **Default temperature bridge** — Can read CPU/GPU temperatures from a LibreHardwareMonitor-compatible JSON bridge and preserve device names for multi-GPU selection
-- **Optional HWiNFO64 integration** — Reads extra sensor data from HWiNFO's shared memory interface when available
+- **Selectable hardware source** — Defaults to MSI Afterburner shared memory and can switch to HWiNFO shared memory in settings
 - **Customizable** — Choose exact sensor rows, overlay mode, HUD panel size, theme, and update interval
 - **Display polish** — Temperature values use the correct `°C` symbol, the HUD fills its SteamVR overlay bounds, and wrist mode defaults to a more compact size
 - **Theme-aware settings window** — The Web settings content and native title bar follow the selected light/dark theme
@@ -22,14 +20,11 @@ A SteamVR overlay application that displays real-time system hardware monitoring
 - Windows 10/11
 - SteamVR
 - Visual Studio 2022 or CMake 3.20+
-- .NET 8 SDK or later, for building the LibreHardwareMonitor bridge helper
 
-MSI Afterburner is the preferred default data source when its hardware
-monitoring shared memory is available. The app uses the first available source
-in this order: MSI Afterburner, LibreHardwareMonitor bridge, HWiNFO, then basic
-Windows CPU/RAM metrics. It does not merge sources to fill missing fields.
-The LibreHardwareMonitor helper writes snapshots to
-`%LOCALAPPDATA%/VRPerfProfiler/lhm-sensors.json`.
+MSI Afterburner is the default hardware data source. HWiNFO is available as an
+optional primary hardware source from the settings window. If the selected
+source's shared memory is unavailable, the app can still display SteamVR
+compositor frame metrics, but hardware rows will be unavailable.
 
 ## Building
 
@@ -38,8 +33,7 @@ The LibreHardwareMonitor helper writes snapshots to
 1. Install [CMake](https://cmake.org/) 3.20 or later
 2. Install Visual Studio 2022 with C++ Desktop Development workload
 3. Ensure SteamVR is installed
-4. Install .NET 8 SDK or later
-5. Install WiX Toolset 4 if you want to build the MSI installer
+4. Install WiX Toolset 4 if you want to build the MSI installer
 
 ### Build Steps
 
@@ -53,8 +47,7 @@ cmake --build . --config Release
 ## Packaging
 
 The Windows installer does not bundle SteamVR. It packages the profiler,
-OpenVR client DLL, WebView2 loader, and a self-contained x64
-LibreHardwareMonitor bridge so users do not need to install the .NET runtime.
+OpenVR client DLL, and WebView2 loader.
 
 Run from a Visual Studio x64 Developer Command Prompt:
 
@@ -74,19 +67,17 @@ under the current user. SteamVR must still be installed separately.
 
 The installer is generated as a standard Windows Installer MSI by WiX Toolset 4.
 `wix.exe` must be in PATH or installed at `.tools\wix\wix.exe`. Use `-SkipMsi`
-to build only the portable ZIP.
+to build only the portable ZIP. MSI rollback is disabled to avoid `Config.Msi`
+permission failures on some custom install drives.
 
 ### Running
 
 1. Start SteamVR
-2. Start MSI Afterburner for the preferred hardware monitoring source
-3. Optional: start HWiNFO64 with shared memory enabled for extra sensors
-4. Run `vr_perf_profiler.exe`
+2. Start MSI Afterburner and ensure hardware monitoring shared memory is available, or start HWiNFO with Shared Memory Support enabled
+3. Run `vr_perf_profiler.exe`
 
-The app connects to SteamVR automatically by default. It starts in the system
-tray, opens the settings window, and keeps retrying if SteamVR starts later.
-The tray menu item `Connect SteamVR Overlay` is still available for an explicit
-manual retry.
+The settings window opens on startup. The app also runs from the system tray. Use `Settings...` to choose the primary hardware source and sensor rows, and
+`Connect SteamVR Overlay` for an explicit manual retry if SteamVR was not ready.
 
 ## Frame Rate Detection
 
@@ -130,14 +121,14 @@ Tray menu:
 ## Architecture
 
 ```
-MSI Afterburner → LibreHardwareMonitor bridge → HWiNFO → Windows APIs
+MSI Afterburner shared memory or HWiNFO shared memory
 SteamVR compositor timing → FPS / frame interval / dropped frames
     → Exact sensor selection + VR frame metrics
     → D2D Renderer
     → OpenVR Overlay
 ```
 
-- **Data Layer** — Reads the first available hardware provider in priority order, keeps raw sensor rows selectable, and reads VR frame timing from SteamVR when connected
+- **Data Layer** — Reads the selected hardware source, keeps raw sensor rows selectable, and reads VR frame timing from SteamVR when connected
 - **Renderer** — Direct2D/Direct3D 11 rendering pipeline
 - **Overlay** — OpenVR IVROverlay integration
 - **UI** — System tray icon and settings dialog

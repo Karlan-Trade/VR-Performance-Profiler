@@ -365,7 +365,9 @@ void SettingsWindow::UpdateInfo(HWND hwnd)
 {
     ReadMetricSelectionsFromList(hwnd);
 
-    const auto newReadings = readingsProvider_ ? readingsProvider_() : std::vector<SensorReading>{};
+    const auto newReadings = readingsProvider_
+        ? readingsProvider_(tempConfig_.data.hardwareSource)
+        : std::vector<SensorReading>{};
 
     HWND hList = GetDlgItem(hwnd, IDC_LIST_METRICS);
     if (!hList) {

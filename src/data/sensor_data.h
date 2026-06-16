@@ -98,10 +98,4 @@ inline std::string SensorReadingKey(const SensorReading& reading)
     return key.str();
 }
 
-// Map HWiNFO reading type string to our category
-// HWiNFO uses strings like "Temperature", "Clock", "Load", etc.
-SensorCategory ClassifySensor(const std::string& readingType,
-                              const std::string& sensorName,
-                              const std::string& label);
-
 } // namespace vrperf

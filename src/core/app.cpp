@@ -4,7 +4,6 @@
 #include "ui/web_settings_window.h"
 
 #include <algorithm>
-#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -193,6 +192,7 @@ bool App::Initialize()
            << " autoConnectVr=" << config_.overlay.autoConnectVr
            << " visibleOnStart=" << config_.overlay.visibleOnStart
            << " mode=" << config_.overlay.mode
+           << " hardwareSource=" << config_.data.hardwareSource
            << " width=" << config_.overlay.widthMeters
            << " hudDistance=" << config_.hud.distanceMeters
            << " hudPitch=" << config_.hud.pitchDegrees;
@@ -213,11 +213,6 @@ bool App::Initialize()
     d2dRenderer_.SetTheme(ThemeFromName(config_.appearance.theme));
     if (!d2dRenderer_.SetTargetTexture(d3d11Renderer_.GetTexture())) {
         return false;
-    }
-
-    // Initialize optional HWiNFO reader (non-fatal if fails)
-    if (!hwinfoReader_.Open()) {
-        // Will retry periodically
     }
 
     overlayPositioner_.SetHudPosition(
@@ -254,7 +249,6 @@ bool App::Initialize()
         return false;
     }
 
-    TryStartSensorBridge();
     UpdateTrayTooltip();
 
     // Register hotkeys
@@ -291,7 +285,6 @@ void App::Shutdown()
     }
 
     overlayManager_.Shutdown();
-    StopSensorBridge();
     hwinfoReader_.Close();
     d2dRenderer_.Shutdown();
     d3d11Renderer_.Shutdown();
@@ -377,7 +370,9 @@ void App::OnTimer()
         overlayManager_.PollEvents();
 
         // Update overlay content
-        UpdateOverlay();
+        if (overlayManager_.IsOverlayVisible()) {
+            UpdateOverlay();
+        }
     }
 }
 
@@ -497,83 +492,14 @@ bool App::TryInitializeOverlay()
     return true;
 }
 
-void App::TryStartSensorBridge()
-{
-    if (sensorBridgeStarted_) {
-        return;
-    }
-
-    const auto exeDir = GetExecutableDirectory();
-    if (exeDir.empty()) {
-        return;
-    }
-
-    const auto bridgePath = std::filesystem::path(exeDir)
-        / L"lhm_bridge"
-        / L"VRPerfProfiler.LhmBridge.exe";
-    if (!std::filesystem::exists(bridgePath)) {
-        return;
-    }
-
-    std::wstring commandLine = L"\"" + bridgePath.wstring() + L"\"";
-    STARTUPINFOW startupInfo = {};
-    startupInfo.cb = sizeof(startupInfo);
-
-    if (CreateProcessW(
-            bridgePath.c_str(),
-            commandLine.data(),
-            nullptr,
-            nullptr,
-            FALSE,
-            CREATE_NO_WINDOW,
-            nullptr,
-            nullptr,
-            &startupInfo,
-            &sensorBridgeProcess_)) {
-        sensorBridgeStarted_ = true;
-    }
-}
-
-void App::StopSensorBridge()
-{
-    if (!sensorBridgeStarted_) {
-        return;
-    }
-
-    if (sensorBridgeProcess_.hProcess) {
-        TerminateProcess(sensorBridgeProcess_.hProcess, 0);
-        WaitForSingleObject(sensorBridgeProcess_.hProcess, 1000);
-        CloseHandle(sensorBridgeProcess_.hProcess);
-        sensorBridgeProcess_.hProcess = nullptr;
-    }
-
-    if (sensorBridgeProcess_.hThread) {
-        CloseHandle(sensorBridgeProcess_.hThread);
-        sensorBridgeProcess_.hThread = nullptr;
-    }
-
-    sensorBridgeStarted_ = false;
-}
-
-std::wstring App::GetExecutableDirectory()
-{
-    wchar_t path[MAX_PATH] = {};
-    const auto length = GetModuleFileNameW(nullptr, path, MAX_PATH);
-    if (length == 0 || length >= MAX_PATH) {
-        return {};
-    }
-
-    return std::filesystem::path(path).parent_path().wstring();
-}
-
 void App::OpenSettings()
 {
     WebSettingsWindow webSettingsWindow;
     const bool openedWebSettings = webSettingsWindow.Show(
         hwnd_,
         config_,
-        [this]() {
-            return CollectDetectedSensorReadings();
+        [this](const std::string& hardwareSource) {
+            return CollectDetectedSensorReadings(hardwareSource);
         },
         [this]() {
             ApplyRuntimeConfig();
@@ -649,22 +575,31 @@ std::vector<SensorReading> App::CollectSensorReadings()
 
 std::vector<SensorReading> App::CollectDetectedSensorReadings()
 {
+    return CollectDetectedSensorReadings(config_.data.hardwareSource);
+}
+
+std::vector<SensorReading> App::CollectDetectedSensorReadings(
+    const std::string& hardwareSource)
+{
     auto frameTiming = overlayManager_.IsInitialized()
         ? openVrFrameTiming_.Read()
         : OpenVrFrameTimingSnapshot{};
-    return CollectDetectedSensorReadings(frameTiming);
+    return CollectDetectedSensorReadings(frameTiming, hardwareSource);
 }
 
 std::vector<SensorReading> App::CollectDetectedSensorReadings(
     const OpenVrFrameTimingSnapshot& frameTiming)
 {
+    return CollectDetectedSensorReadings(frameTiming, config_.data.hardwareSource);
+}
+
+std::vector<SensorReading> App::CollectDetectedSensorReadings(
+    const OpenVrFrameTimingSnapshot& frameTiming,
+    const std::string& hardwareSource)
+{
     std::vector<SensorReading> readings;
 
-    if (msiAfterburnerProvider_.Refresh()) {
-        readings = msiAfterburnerProvider_.GetReadings();
-    } else if (libreHardwareMonitorBridgeProvider_.Refresh()) {
-        readings = libreHardwareMonitorBridgeProvider_.GetReadings();
-    } else {
+    if (hardwareSource == "hwinfo") {
         if (!hwinfoReader_.IsConnected()) {
             hwinfoReader_.Open();
         }
@@ -672,13 +607,8 @@ std::vector<SensorReading> App::CollectDetectedSensorReadings(
             hwinfoReader_.Refresh();
             readings = hwinfoReader_.GetReadings();
         }
-        if (!readings.empty()) {
-            AppendVrFrameReadings(readings, frameTiming);
-            return readings;
-        }
-
-        windowsFallbackProvider_.Refresh();
-        readings = windowsFallbackProvider_.GetReadings();
+    } else if (msiAfterburnerProvider_.Refresh()) {
+        readings = msiAfterburnerProvider_.GetReadings();
     }
 
     AppendVrFrameReadings(readings, frameTiming);

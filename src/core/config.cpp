@@ -99,7 +99,7 @@ std::string Config::GetDefaultPath()
 
 void Config::SetDefaults()
 {
-    version = 5;
+    version = 6;
     overlay = OverlayConfig{};
     hud = HudConfig{};
     wrist = WristConfig{};
@@ -122,6 +122,7 @@ void Config::SetDefaults()
 
     appearance = AppearanceConfig{};
     hotkeys = HotkeyConfig{};
+    data = DataConfig{};
     general = GeneralConfig{};
 }
 
@@ -196,11 +197,19 @@ void Config::FromJson(const nlohmann::json& j)
         hotkeys.cycleMetrics     = hk.value("cycle_metrics", hotkeys.cycleMetrics);
     }
 
+    // Data source
+    if (j.contains("data")) {
+        auto& d = j["data"];
+        data.hardwareSource = d.value("hardware_source", data.hardwareSource);
+    }
+    if (data.hardwareSource != "hwinfo") {
+        data.hardwareSource = "afterburner";
+    }
+
     // General
     if (j.contains("general")) {
         auto& g = j["general"];
         general.startMinimized      = g.value("start_minimized", general.startMinimized);
-        general.autoStartHwinfoCheck = g.value("auto_start_hwinfo_check", general.autoStartHwinfoCheck);
         general.language            = g.value("language", general.language);
         general.logLevel            = g.value("log_level", general.logLevel);
     }
@@ -236,6 +245,11 @@ void Config::FromJson(const nlohmann::json& j)
 
     if (loadedVersion < 5) {
         version = 5;
+    }
+
+    if (loadedVersion < 6) {
+        data.hardwareSource = "afterburner";
+        version = 6;
     }
 
     overlay.autoConnectVr = false;
@@ -323,10 +337,14 @@ nlohmann::json Config::ToJson() const
         {"cycle_metrics", hotkeys.cycleMetrics}
     };
 
+    // Data source
+    j["data"] = {
+        {"hardware_source", data.hardwareSource == "hwinfo" ? "hwinfo" : "afterburner"}
+    };
+
     // General
     j["general"] = {
         {"start_minimized", general.startMinimized},
-        {"auto_start_hwinfo_check", general.autoStartHwinfoCheck},
         {"language", general.language},
         {"log_level", general.logLevel}
     };

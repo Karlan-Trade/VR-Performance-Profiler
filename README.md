@@ -9,40 +9,27 @@ VR Performance Profiler 是一个独立的 SteamVR/OpenVR 覆盖层性能监控�
 - 实时硬件监控：CPU/GPU 使用率、温度、频率、内存占用等
 - VR 帧数监控：FPS、帧间隔、GPU 帧时间、头显刷新率、丢帧数
 - SteamVR 覆盖层：支持 HUD 视角固定模式和手腕模式
-- MSI Afterburner 优先数据源：可读取硬件监控共享内存
-- 内置温度桥接工具：通过 LibreHardwareMonitor 读取 CPU/GPU 温度，并保留设备名便于区分多 GPU 读数
-- 可选 HWiNFO64 集成：启用共享内存后可读取更多传感器
+- 硬件数据源：默认读取 MSI Afterburner 共享内存，也可在设置中切换为 HWiNFO
 - 可配置显示项：设置界面中按传感器行勾选要显示的数据，可调 HUD 面板大小
 - 显示优化：温度以正确的 `°C` 符号显示，HUD 显示范围与覆盖层范围一致，手腕界面默认更紧凑
 - 设置界面主题：深浅主题会同步更新 Web 设置窗口内容和标题栏颜色
-- 单实例运行：重复启动会直接退出，避免多个托盘/桥接进程并存
+- 单实例运行：重复启动会直接退出，避免多个托盘进程并存
 
 ## 运行要求
 
 - Windows 10/11 x64
 - SteamVR
 - WebView2 Runtime：设置界面需要。多数 Windows 11/Edge 环境已自带
-- 可选：MSI Afterburner，用于更完整的硬件监控数据
-- 可选：HWiNFO64，用于额外传感器数据
+- MSI Afterburner：默认硬件监控数据来源，需要启用 Hardware Monitoring / shared memory
+- HWiNFO：可选硬件监控数据来源，需要开启 Shared Memory Support
 
 安装版不包含 SteamVR。SteamVR 需要用户自行安装。
 
-## 数据源优先级
+## 数据源
 
-程序按以下顺序使用第一个可用硬件数据源：
+硬件传感器默认读取 MSI Afterburner 的硬件监控共享内存。也可以在设置界面的“主数据来源”下拉框中切换为 HWiNFO，共享内存不可用时硬件行会为空。
 
-1. MSI Afterburner
-2. LibreHardwareMonitor bridge
-3. HWiNFO64
-4. Windows 基础 CPU/RAM 指标
-
-当前不会混合多个数据源补齐缺失字段。SteamVR 帧数/帧时间数据作为虚拟传感器行加入设置界面，可单独勾选显示。
-
-LibreHardwareMonitor bridge 会把快照写入：
-
-```text
-%LOCALAPPDATA%\VRPerfProfiler\lhm-sensors.json
-```
+SteamVR 帧数/帧时间数据作为虚拟传感器行加入设置界面，可单独勾选显示。
 
 ## 安装版
 
@@ -56,10 +43,11 @@ VRPerformanceProfiler-<version>-Setup.msi
 
 - 允许用户选择安装位置
 - 默认安装到 `%LOCALAPPDATA%\Programs\VR Performance Profiler`
-- 安装主程序、OpenVR DLL、WebView2 loader、自包含的 LibreHardwareMonitor bridge
+- 安装主程序、OpenVR DLL、WebView2 loader
 - 创建开始菜单快捷方式和标准卸载项
 
 安装器由 WiX Toolset 生成标准 Windows Installer MSI，不再发布压缩自解压 EXE 安装器。
+为避免部分自定义安装盘符上 `Config.Msi` 回滚目录权限异常，MSI 会禁用 Windows Installer 回滚。
 
 ## 便携版
 
@@ -74,11 +62,10 @@ VRPerformanceProfiler-<version>-portable.zip
 ## 使用方式
 
 1. 启动 SteamVR
-2. 可选：启动 MSI Afterburner
-3. 可选：启动 HWiNFO64 并开启 Shared Memory
-4. 运行 `vr_perf_profiler.exe`
-5. 在设置窗口中勾选要显示的传感器和 VR 帧数指标
-6. 可按需要调整主题、更新间隔、HUD 面板大小，并在 HUD/手腕模式之间切换
+2. 启动 MSI Afterburner，并确认 Hardware Monitoring / shared memory 可用；或启动 HWiNFO 并开启 Shared Memory Support
+3. 运行 `vr_perf_profiler.exe`
+4. 设置窗口会在启动后显示；选择主数据来源，勾选要显示的传感器和 VR 帧数指标
+5. 可按需要调整主题、更新间隔、HUD 面板大小，并在 HUD/手腕模式之间切换
 
 程序会在系统托盘运行。托盘菜单提供：
 
@@ -109,9 +96,8 @@ VRPerformanceProfiler-<version>-portable.zip
 
 1. CMake 3.20 或更高版本
 2. Visual Studio 2022，安装 C++ Desktop Development 工作负载
-3. .NET 8 SDK 或更高版本
-4. SteamVR/OpenVR 运行环境
-5. WiX Toolset 4，用于构建 MSI 安装器；只构建便携 ZIP 时可不安装
+3. SteamVR/OpenVR 运行环境
+4. WiX Toolset 4，用于构建 MSI 安装器；只构建便携 ZIP 时可不安装
 
 示例：
 
@@ -137,7 +123,7 @@ dist\
 ```
 
 打包脚本会生成安装器和便携 ZIP。安装器不会打包 SteamVR。
-安装器由 WiX Toolset 4 生成；构建 MSI 时需要 `wix.exe` 在 PATH 中，或安装到仓库本地 `.tools\wix\wix.exe`。若只需要便携 ZIP，可添加 `-SkipMsi`。
+安装器由 WiX Toolset 4 生成；构建 MSI 时需要 `wix.exe` 在 PATH 中，或安装到仓库本地 `.tools\wix\wix.exe`。若只需要便携 ZIP，可添加 `-SkipMsi`。MSI 会禁用 Windows Installer 回滚，以避开部分自定义盘符上的 `Config.Msi` 权限问题。
 
 ## 反作弊边界
 

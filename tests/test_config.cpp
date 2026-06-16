@@ -20,7 +20,7 @@ int main()
         assert(config.overlay.mode == "hud");
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.overlay.alpha == 0.85f);
-        assert(config.version == 5);
+        assert(config.version == 6);
         assert(config.overlay.autoConnectVr == false);
         assert(config.hud.pitchDegrees == 0.0f);
         assert(config.hud.distanceMeters == 1.0f);
@@ -28,6 +28,7 @@ int main()
         assert(config.wrist.widthMeters == 0.75f);
         assert(config.metrics.size() == 13);
         assert(config.appearance.theme == "dark");
+        assert(config.data.hardwareSource == "afterburner");
         assert(config.general.language == "zh");
 
         std::cout << "[PASS] Default values correct" << std::endl;
@@ -44,6 +45,7 @@ int main()
         config.overlay.alpha = 0.9f;
         config.overlay.updateIntervalMs = 1000;
         config.appearance.theme = "light";
+        config.data.hardwareSource = "hwinfo";
         config.general.language = "en";
 
         // Disable a metric
@@ -68,6 +70,7 @@ int main()
         assert(config2.overlay.alpha == 0.9f);
         assert(config2.overlay.updateIntervalMs == 1000);
         assert(config2.appearance.theme == "light");
+        assert(config2.data.hardwareSource == "hwinfo");
         assert(config2.general.language == "en");
 
         for (const auto& m : config2.metrics) {
@@ -95,8 +98,10 @@ int main()
         assert(j.contains("metrics"));
         assert(j.contains("appearance"));
         assert(j.contains("hotkeys"));
+        assert(j.contains("data"));
         assert(j.contains("general"));
         assert(j["overlay"]["width_meters"] == 1.25f);
+        assert(j["data"]["hardware_source"] == "hwinfo");
 
         assert(j["metrics"].is_array());
         assert(j["metrics"].size() == 13);
@@ -122,12 +127,13 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 5);
+        assert(config.version == 6);
         assert(config.overlay.autoConnectVr == false);
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.hud.pitchDegrees == 0.0f);
         assert(config.hud.distanceMeters == 1.0f);
         assert(config.wrist.widthMeters == 0.75f);
+        assert(config.data.hardwareSource == "afterburner");
 
         std::cout << "[PASS] v1 auto-connect migration passed" << std::endl;
     }
@@ -163,7 +169,7 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 5);
+        assert(config.version == 6);
         assert(config.overlay.widthMeters == 1.5f);
         assert(config.hud.pitchDegrees == 0.0f);
         assert(config.hud.distanceMeters == 1.0f);
@@ -201,7 +207,7 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 5);
+        assert(config.version == 6);
         assert(config.overlay.autoConnectVr == false);
         assert(config.wrist.hand == "right");
         assert(config.wrist.widthMeters == 0.75f);
@@ -264,7 +270,7 @@ int main()
         vrperf::Config config;
         config.Load(testPath);
 
-        assert(config.version == 5);
+        assert(config.version == 6);
         assert(config.hud.distanceMeters == 1.0f);
 
         std::cout << "[PASS] current HUD distance normalization passed" << std::endl;

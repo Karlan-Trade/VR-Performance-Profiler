@@ -10,7 +10,6 @@ namespace vrperf {
 
 // Forward declarations
 class Config;
-class HwInfoReader;
 class OverlayManager;
 class OverlayPositioner;
 class D3D11Renderer;

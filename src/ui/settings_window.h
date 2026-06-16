@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/config.h"
-#include "hwinfo/sensor_data.h"
+#include "data/sensor_data.h"
 
 #include <Windows.h>
 #include <functional>
@@ -15,7 +15,7 @@ public:
     SettingsWindow();
     ~SettingsWindow();
 
-    using ReadingsProvider = std::function<std::vector<SensorReading>()>;
+    using ReadingsProvider = std::function<std::vector<SensorReading>(const std::string&)>;
     using ApplyCallback = std::function<void()>;
     using ConnectCallback = std::function<bool()>;
 

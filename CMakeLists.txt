@@ -3,7 +3,7 @@ if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
 
-project(VRPerfProfiler VERSION 0.1.3 LANGUAGES CXX)
+project(VRPerfProfiler VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,17 +33,6 @@ FetchContent_Declare(
     GIT_TAG        v3.11.3
 )
 FetchContent_MakeAvailable(nlohmann_json)
-
-find_program(DOTNET_EXECUTABLE
-    NAMES dotnet dotnet.exe
-    PATHS "C:/Program Files/dotnet"
-)
-
-if(CMAKE_BUILD_TYPE)
-    set(LHM_BRIDGE_CONFIGURATION "${CMAKE_BUILD_TYPE}")
-else()
-    set(LHM_BRIDGE_CONFIGURATION "Debug")
-endif()
 
 # ──────────────────────────────────────────────────────────────
 # OpenVR paths
@@ -94,10 +83,8 @@ add_library(vr_perf_core STATIC
     src/core/config.cpp
     src/core/log.cpp
     src/core/single_instance_guard.cpp
-    src/data/libre_hardware_monitor_bridge_provider.cpp
     src/data/metric_aggregator.cpp
     src/data/msi_afterburner_provider.cpp
-    src/data/windows_fallback_provider.cpp
     src/hwinfo/hwinfo_reader.cpp
     src/overlay/overlay_manager.cpp
     src/overlay/overlay_positioner.cpp
@@ -170,23 +157,6 @@ add_custom_command(TARGET vr_perf_profiler POST_BUILD
         $<TARGET_FILE_DIR:vr_perf_profiler>
     COMMENT "Copying openvr_api.dll to output directory"
 )
-
-if(DOTNET_EXECUTABLE)
-    add_custom_command(TARGET vr_perf_profiler POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E env
-            "DOTNET_CLI_HOME=${CMAKE_CURRENT_SOURCE_DIR}/.dotnet-home"
-            "NUGET_PACKAGES=${CMAKE_CURRENT_SOURCE_DIR}/.nuget-packages"
-            "APPDATA=${CMAKE_CURRENT_BINARY_DIR}/appdata"
-            "${DOTNET_EXECUTABLE}" publish
-            "${CMAKE_CURRENT_SOURCE_DIR}/tools/lhm_bridge/VRPerfProfiler.LhmBridge.csproj"
-            -c "${LHM_BRIDGE_CONFIGURATION}"
-            -o "$<TARGET_FILE_DIR:vr_perf_profiler>/lhm_bridge"
-            --no-self-contained
-        COMMENT "Publishing LibreHardwareMonitor bridge helper"
-    )
-else()
-    message(WARNING "dotnet SDK not found; LibreHardwareMonitor bridge helper will not be built")
-endif()
 
 # ──────────────────────────────────────────────────────────────
 # Tests

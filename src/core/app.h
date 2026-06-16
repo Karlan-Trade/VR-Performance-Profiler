@@ -2,10 +2,8 @@
 
 #include "core/types.h"
 #include "core/config.h"
-#include "data/libre_hardware_monitor_bridge_provider.h"
 #include "data/metric_aggregator.h"
 #include "data/msi_afterburner_provider.h"
-#include "data/windows_fallback_provider.h"
 #include "hwinfo/hwinfo_reader.h"
 #include "overlay/overlay_manager.h"
 #include "overlay/overlay_positioner.h"
@@ -38,17 +36,19 @@ private:
     std::vector<SensorReading> CollectSensorReadings();
     std::vector<SensorReading> CollectDetectedSensorReadings();
     std::vector<SensorReading> CollectDetectedSensorReadings(
+        const std::string& hardwareSource);
+    std::vector<SensorReading> CollectDetectedSensorReadings(
         const OpenVrFrameTimingSnapshot& frameTiming);
+    std::vector<SensorReading> CollectDetectedSensorReadings(
+        const OpenVrFrameTimingSnapshot& frameTiming,
+        const std::string& hardwareSource);
     void UpdateOverlay();
     void ApplyOverlayTransform();
     void ApplyRuntimeConfig();
     bool ConnectSteamVrOverlay(HWND ownerHwnd, bool showMessage);
     bool TryInitializeOverlay();
-    void TryStartSensorBridge();
-    void StopSensorBridge();
     void OpenSettings();
     void UpdateTrayTooltip();
-    static std::wstring GetExecutableDirectory();
 
     // Window & message pump
     HWND hwnd_ = nullptr;
@@ -61,10 +61,8 @@ private:
 
     // Subsystems
     Config config_;
-    HwInfoReader hwinfoReader_;
     MsiAfterburnerProvider msiAfterburnerProvider_;
-    LibreHardwareMonitorBridgeProvider libreHardwareMonitorBridgeProvider_;
-    WindowsFallbackProvider windowsFallbackProvider_;
+    HwInfoReader hwinfoReader_;
     MetricAggregator metricAggregator_;
     OverlayManager overlayManager_;
     OverlayPositioner overlayPositioner_;
@@ -75,8 +73,6 @@ private:
 
     bool running_ = false;
     DWORD lastOverlayRetryMs_ = 0;
-    PROCESS_INFORMATION sensorBridgeProcess_ = {};
-    bool sensorBridgeStarted_ = false;
 };
 
 } // namespace vrperf

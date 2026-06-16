@@ -55,9 +55,12 @@ struct HotkeyConfig {
     std::string cycleMetrics = "ctrl+shift+n";
 };
 
+struct DataConfig {
+    std::string hardwareSource = "afterburner"; // "afterburner" or "hwinfo"
+};
+
 struct GeneralConfig {
     bool startMinimized = true;
-    bool autoStartHwinfoCheck = true;
     std::string language = "zh";
     std::string logLevel = "info";
 };
@@ -72,6 +75,7 @@ public:
     std::vector<MetricConfig> metrics;
     AppearanceConfig appearance;
     HotkeyConfig hotkeys;
+    DataConfig data;
     GeneralConfig general;
 
     // Load config from default path or specified path

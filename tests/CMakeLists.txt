@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
-# Simple test executable (no external test framework needed for now)
+# Simple test executables (no external test framework needed for now)
+
 add_executable(test_hwinfo_reader
     test_hwinfo_reader.cpp
 )
@@ -37,16 +38,6 @@ add_custom_command(TARGET test_overlay_positioner POST_BUILD
 )
 
 add_test(NAME OverlayPositioner COMMAND test_overlay_positioner)
-
-add_executable(test_windows_fallback_provider
-    test_windows_fallback_provider.cpp
-)
-
-target_link_libraries(test_windows_fallback_provider PRIVATE
-    vr_perf_core
-)
-
-add_test(NAME WindowsFallbackProvider COMMAND test_windows_fallback_provider)
 
 add_executable(test_metric_aggregator
     test_metric_aggregator.cpp
@@ -101,16 +92,6 @@ target_link_libraries(test_msi_afterburner_provider PRIVATE
 )
 
 add_test(NAME MsiAfterburnerProvider COMMAND test_msi_afterburner_provider)
-
-add_executable(test_libre_hardware_monitor_bridge_provider
-    test_libre_hardware_monitor_bridge_provider.cpp
-)
-
-target_link_libraries(test_libre_hardware_monitor_bridge_provider PRIVATE
-    vr_perf_core
-)
-
-add_test(NAME LibreHardwareMonitorBridgeProvider COMMAND test_libre_hardware_monitor_bridge_provider)
 
 add_executable(test_single_instance_guard
     test_single_instance_guard.cpp

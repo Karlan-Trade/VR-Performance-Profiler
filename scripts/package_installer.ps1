@@ -99,7 +99,6 @@ $legacyInstallerPath = Join-Path $outputPath "VRPerformanceProfiler-$version-Set
 $portableZip = Join-Path $outputPath "VRPerformanceProfiler-$version-portable.zip"
 
 Assert-Command "cmake"
-Assert-Command "dotnet"
 
 if (-not $SkipBuild) {
     $configureArgs = @(
@@ -140,39 +139,6 @@ if (Test-Path $webViewLoader) {
     Copy-Item -Path $webViewLoader -Destination $appPayload -Force
 }
 
-$lhmBridgeOutput = Join-Path $appPayload "lhm_bridge"
-$previousDotnetCliHome = $env:DOTNET_CLI_HOME
-$previousDotnetSkipFirstTimeExperience = $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE
-$previousNugetPackages = $env:NUGET_PACKAGES
-$previousAppData = $env:APPDATA
-try {
-    $env:DOTNET_CLI_HOME = Join-Path $repoRoot ".dotnet-home"
-    $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = "1"
-    $env:NUGET_PACKAGES = Join-Path $repoRoot ".nuget-packages"
-    $env:APPDATA = Join-Path $repoRoot ".appdata"
-    New-Item -ItemType Directory -Force -Path $env:DOTNET_CLI_HOME, $env:NUGET_PACKAGES, $env:APPDATA | Out-Null
-
-    Invoke-Native -FilePath "dotnet" -Arguments @(
-        "publish",
-        (Join-Path $repoRoot "tools\lhm_bridge\VRPerfProfiler.LhmBridge.csproj"),
-        "--configfile", (Join-Path $repoRoot "NuGet.Config"),
-        "--ignore-failed-sources",
-        "-c", $Configuration,
-        "-r", "win-x64",
-        "--self-contained", "true",
-        "-p:PublishSingleFile=false",
-        "-p:DebugType=None",
-        "-p:DebugSymbols=false",
-        "-o", $lhmBridgeOutput
-    )
-}
-finally {
-    $env:DOTNET_CLI_HOME = $previousDotnetCliHome
-    $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = $previousDotnetSkipFirstTimeExperience
-    $env:NUGET_PACKAGES = $previousNugetPackages
-    $env:APPDATA = $previousAppData
-}
-
 if (Test-Path $portableZip) {
     Remove-Item -Path $portableZip -Force
 }
@@ -196,14 +162,8 @@ if (-not $SkipInstallerExe -and -not $SkipMsi) {
     Get-ChildItem -Path $appPayload -File -Recurse |
         Sort-Object FullName |
         ForEach-Object {
-            $relativePath = $_.FullName.Substring($appPayload.Length).TrimStart("\")
-            $directoryId = "INSTALLFOLDER"
-            if ($relativePath.StartsWith("lhm_bridge\", [System.StringComparison]::OrdinalIgnoreCase)) {
-                $directoryId = "LhmBridgeFolder"
-            }
-
             $source = Escape-WixAttribute $_.FullName
-            [void]$componentBuilder.AppendLine("    <Component Id=""cmp$fileIndex"" Directory=""$directoryId"" Guid=""*"">")
+            [void]$componentBuilder.AppendLine("    <Component Id=""cmp$fileIndex"" Directory=""INSTALLFOLDER"" Guid=""*"">")
             [void]$componentBuilder.AppendLine("      <File Id=""fil$fileIndex"" Source=""$source"" KeyPath=""yes"" />")
             [void]$componentBuilder.AppendLine("    </Component>")
             $fileIndex++
@@ -225,6 +185,7 @@ if (-not $SkipInstallerExe -and -not $SkipMsi) {
            Scope="perUser">
     <MajorUpgrade DowngradeErrorMessage="A newer version of VR Performance Profiler is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="medium" />
+    <Property Id="DISABLEROLLBACK" Value="1" />
     <Icon Id="AppIcon.ico" SourceFile="$escapedIcon" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
@@ -233,9 +194,7 @@ if (-not $SkipInstallerExe -and -not $SkipMsi) {
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="LocalProgramsFolder" Name="Programs">
-        <Directory Id="INSTALLFOLDER" Name="VR Performance Profiler">
-          <Directory Id="LhmBridgeFolder" Name="lhm_bridge" />
-        </Directory>
+        <Directory Id="INSTALLFOLDER" Name="VR Performance Profiler" />
       </Directory>
     </StandardDirectory>
 

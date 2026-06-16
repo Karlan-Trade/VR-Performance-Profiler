@@ -1,33 +1,29 @@
 #pragma once
 
+#include "data/sensor_data.h"
 #include "hwinfo/hwinfo_structs.h"
-#include "hwinfo/sensor_data.h"
 
 #include <Windows.h>
-#include <vector>
-#include <string>
+
 #include <mutex>
+#include <string>
+#include <vector>
 
 namespace vrperf {
+
+SensorCategory ClassifySensor(const std::string& readingType,
+                              const std::string& sensorName,
+                              const std::string& label);
 
 class HwInfoReader {
 public:
     HwInfoReader();
     ~HwInfoReader();
 
-    // Open shared memory mapping. Returns false if HWiNFO is not running.
     bool Open();
-
-    // Close the mapping.
     void Close();
-
-    // Check if connected to HWiNFO shared memory.
     bool IsConnected() const;
-
-    // Re-read the shared memory. Returns true if data was refreshed.
     bool Refresh();
-
-    // Get the latest sensor readings.
     std::vector<SensorReading> GetReadings() const;
 
 private:
@@ -36,10 +32,8 @@ private:
 
     HANDLE hMapping_ = nullptr;
     const HwInfoSensorsSharedMem* pSharedMem_ = nullptr;
-
     std::vector<SensorReading> readings_;
     mutable std::mutex readingsMutex_;
-
     uint64_t lastPollTime_ = 0;
 };
 

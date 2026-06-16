@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hwinfo/sensor_data.h"
+#include "data/sensor_data.h"
 #include "core/config.h"
 #include "render/color_theme.h"
 

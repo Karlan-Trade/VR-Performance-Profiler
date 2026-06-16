@@ -100,6 +100,18 @@ bool OverlayManager::CreateOverlay(const std::string& key, const std::string& na
     overlay_->SetOverlayFlag(handle_, vr::VROverlayFlags_IsPremultiplied, true);
     overlay_->SetOverlayFlag(handle_, vr::VROverlayFlags_IgnoreTextureAlpha, true);
     overlay_->SetOverlayFlag(handle_, vr::VROverlayFlags_SortWithNonSceneOverlays, true);
+    vr::VRTextureBounds_t bounds;
+    bounds.uMin = 0.0f;
+    bounds.uMax = 1.0f;
+    bounds.vMin = 0.0f;
+    bounds.vMax = 1.0f;
+    const auto boundsErr = overlay_->SetOverlayTextureBounds(handle_, &bounds);
+    if (boundsErr != vr::VROverlayError_None) {
+        std::ostringstream boundsMessage;
+        boundsMessage << "SetOverlayTextureBounds failed: "
+                      << overlay_->GetOverlayErrorNameFromEnum(boundsErr);
+        LogInfo(boundsMessage.str());
+    }
 
     std::ostringstream ss;
     ss << "OpenVR CreateOverlay: success handle=" << handle_;
@@ -195,19 +207,6 @@ bool OverlayManager::SetTexture(ID3D11Texture2D* d3dTexture)
     texture.eType = vr::TextureType_DirectX;
     texture.eColorSpace = vr::ColorSpace_Auto;
 
-    vr::VRTextureBounds_t bounds;
-    bounds.uMin = 0.0f;
-    bounds.uMax = 1.0f;
-    bounds.vMin = 0.0f;
-    bounds.vMax = 1.0f;
-    const auto boundsErr = overlay_->SetOverlayTextureBounds(handle_, &bounds);
-    if (boundsErr != vr::VROverlayError_None) {
-        std::ostringstream ss;
-        ss << "SetOverlayTextureBounds failed: "
-           << overlay_->GetOverlayErrorNameFromEnum(boundsErr);
-        LogInfo(ss.str());
-    }
-
     const auto err = overlay_->SetOverlayTexture(handle_, &texture);
     if (err != vr::VROverlayError_None) {
         std::ostringstream ss;
@@ -219,10 +218,6 @@ bool OverlayManager::SetTexture(ID3D11Texture2D* d3dTexture)
         return false;
     }
 
-    std::ostringstream ss;
-    ss << "OpenVR SetOverlayTexture: success texture=" << d3dTexture
-       << " visible=" << overlay_->IsOverlayVisible(handle_);
-    LogInfo(ss.str());
     return true;
 }
 
