@@ -3,6 +3,7 @@
 
 #include "core/log.h"
 
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 
@@ -139,6 +140,18 @@ void OverlayPositioner::SetOverlayOffset(float x, float y, float z)
     offsetZ_ = z;
 }
 
+void OverlayPositioner::SetWristOffset(float x, float y, float z)
+{
+    wristOffsetX_ = x;
+    wristOffsetY_ = y;
+    wristOffsetZ_ = z;
+}
+
+void OverlayPositioner::SetWristOffsetScale(float scale)
+{
+    wristOffsetScale_ = (std::clamp)(scale, 0.01f, 1.0f);
+}
+
 void OverlayPositioner::SetWristHand(bool isLeft)
 {
     isLeftHand_ = isLeft;
@@ -176,7 +189,10 @@ vr::HmdMatrix34_t OverlayPositioner::MakeWristTransform() const
     matrix = Multiply(matrix, RotationX(rotX));
     matrix = Multiply(matrix, RotationY(rotY));
     matrix = Multiply(matrix, RotationZ(rotZ));
-    matrix = Multiply(matrix, Translation(x + offsetX_, y + offsetY_, z + offsetZ_));
+    matrix = Multiply(matrix, Translation(
+        x + wristOffsetX_ * wristOffsetScale_,
+        y + wristOffsetY_ * wristOffsetScale_,
+        z + wristOffsetZ_ * wristOffsetScale_));
     return ToOpenVrMatrix(matrix);
 }
 

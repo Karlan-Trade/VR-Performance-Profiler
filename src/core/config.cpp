@@ -2,6 +2,7 @@
 #include <fstream>
 #include <filesystem>
 #include <Windows.h>
+#include <algorithm>
 
 namespace vrperf {
 
@@ -162,6 +163,10 @@ void Config::FromJson(const nlohmann::json& j)
         wrist.offsetX    = w.value("offset_x", wrist.offsetX);
         wrist.offsetY    = w.value("offset_y", wrist.offsetY);
         wrist.offsetZ    = w.value("offset_z", wrist.offsetZ);
+        wrist.offsetScale = (std::clamp)(
+            w.value("offset_scale", wrist.offsetScale),
+            0.01f,
+            1.0f);
         wrist.tiltX      = w.value("tilt_x", wrist.tiltX);
         wrist.tiltY      = w.value("tilt_y", wrist.tiltY);
         wrist.tiltZ      = w.value("tilt_z", wrist.tiltZ);
@@ -261,13 +266,16 @@ void Config::FromJson(const nlohmann::json& j)
 
     overlay.autoConnectVr = false;
 
-    wrist.widthMeters = 0.75f;
-    wrist.offsetX = 0.0f;
-    wrist.offsetY = 0.0f;
-    wrist.offsetZ = 0.0f;
-    wrist.tiltX = 0.0f;
-    wrist.tiltY = 0.0f;
-    wrist.tiltZ = 0.0f;
+    if (loadedVersion < 7) {
+        wrist.widthMeters = 0.75f;
+        wrist.offsetX = 0.0f;
+        wrist.offsetY = 0.0f;
+        wrist.offsetZ = 0.0f;
+        wrist.offsetScale = 0.25f;
+        wrist.tiltX = 0.0f;
+        wrist.tiltY = 0.0f;
+        wrist.tiltZ = 0.0f;
+    }
 }
 
 nlohmann::json Config::ToJson() const
@@ -302,6 +310,7 @@ nlohmann::json Config::ToJson() const
         {"offset_x", wrist.offsetX},
         {"offset_y", wrist.offsetY},
         {"offset_z", wrist.offsetZ},
+        {"offset_scale", wrist.offsetScale},
         {"tilt_x", wrist.tiltX},
         {"tilt_y", wrist.tiltY},
         {"tilt_z", wrist.tiltZ}

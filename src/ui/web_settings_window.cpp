@@ -612,16 +612,32 @@ void WebSettingsWindow::ApplyFromJson(const std::wstring& messageJson, bool appl
         0.5f,
         2.5f);
     tempConfig_.overlay.offsetX = (std::clamp)(
-        message.value("offsetX", tempConfig_.overlay.offsetX),
+        message.value("hudOffsetX", message.value("offsetX", tempConfig_.overlay.offsetX)),
         -1.0f,
         1.0f);
     tempConfig_.overlay.offsetY = (std::clamp)(
-        message.value("offsetY", tempConfig_.overlay.offsetY),
+        message.value("hudOffsetY", message.value("offsetY", tempConfig_.overlay.offsetY)),
         -1.0f,
         1.0f);
     tempConfig_.overlay.offsetZ = (std::clamp)(
-        message.value("offsetZ", tempConfig_.overlay.offsetZ),
+        message.value("hudOffsetZ", message.value("offsetZ", tempConfig_.overlay.offsetZ)),
         -1.0f,
+        1.0f);
+    tempConfig_.wrist.offsetX = (std::clamp)(
+        message.value("wristOffsetX", tempConfig_.wrist.offsetX),
+        -1.0f,
+        1.0f);
+    tempConfig_.wrist.offsetY = (std::clamp)(
+        message.value("wristOffsetY", tempConfig_.wrist.offsetY),
+        -1.0f,
+        1.0f);
+    tempConfig_.wrist.offsetZ = (std::clamp)(
+        message.value("wristOffsetZ", tempConfig_.wrist.offsetZ),
+        -1.0f,
+        1.0f);
+    tempConfig_.wrist.offsetScale = (std::clamp)(
+        message.value("wristOffsetScale", tempConfig_.wrist.offsetScale),
+        0.01f,
         1.0f);
     const auto wristHand = message.value("wristHand", tempConfig_.wrist.hand);
     tempConfig_.wrist.hand = wristHand == "right" ? "right" : "left";
@@ -748,6 +764,13 @@ std::wstring WebSettingsWindow::BuildConfigJson() const
         {"offsetX", tempConfig_.overlay.offsetX},
         {"offsetY", tempConfig_.overlay.offsetY},
         {"offsetZ", tempConfig_.overlay.offsetZ},
+        {"hudOffsetX", tempConfig_.overlay.offsetX},
+        {"hudOffsetY", tempConfig_.overlay.offsetY},
+        {"hudOffsetZ", tempConfig_.overlay.offsetZ},
+        {"wristOffsetX", tempConfig_.wrist.offsetX},
+        {"wristOffsetY", tempConfig_.wrist.offsetY},
+        {"wristOffsetZ", tempConfig_.wrist.offsetZ},
+        {"wristOffsetScale", tempConfig_.wrist.offsetScale},
         {"wristHand", tempConfig_.wrist.hand},
         {"theme", tempConfig_.appearance.theme},
         {"language", tempConfig_.general.language},
@@ -894,6 +917,11 @@ std::wstring WebSettingsWindow::BuildHtml() const
         <button id="handLeft">Left</button>
         <button id="handRight">Right</button>
       </div>
+      <label id="wristOffsetScaleLabel" for="wristOffsetScale">Wrist offset scale</label>
+      <div class="rangeRow">
+        <input id="wristOffsetScale" type="range" min="0.01" max="1" step="0.01">
+        <span id="wristOffsetScaleValue" class="valueBadge">0.25x</span>
+      </div>
       <label id="panelSizeLabel" for="panelSize">HUD panel size</label>
       <div class="rangeRow">
         <input id="panelSize" type="range" min="0.5" max="2.5" step="0.05">
@@ -940,12 +968,12 @@ std::wstring WebSettingsWindow::BuildHtml() const
     </main>
   </div>
   <script>
-    const state = { config:{mode:'hud', overlayWidthMeters:1.5, offsetX:0, offsetY:0, offsetZ:0, wristHand:'left', theme:'dark', language:'zh', hardwareSource:'afterburner', selectedKeys:[]}, readings:[], filter:'', initialized:false, statusMessage:'', statusOk:null };
+    const state = { config:{mode:'hud', overlayWidthMeters:1.5, hudOffsetX:0, hudOffsetY:0, hudOffsetZ:0, wristOffsetX:0, wristOffsetY:0, wristOffsetZ:0, wristOffsetScale:0.25, wristHand:'left', theme:'dark', language:'zh', hardwareSource:'afterburner', selectedKeys:[]}, readings:[], filter:'', initialized:false, statusMessage:'', statusOk:null };
     const $ = id => document.getElementById(id);
     const strings = {
       en: {
         title:'VR Performance Profiler', overlayHeading:'Overlay', offsetHeading:'Offset', appearanceHeading:'Appearance', dataHeading:'Data',
-        hud:'HUD', wrist:'Wrist', wristHand:'Wrist hand', leftHand:'Left', rightHand:'Right', panelSize:'HUD panel size', offsetX:'X axis', offsetY:'Y axis', offsetZ:'Z axis', theme:'Theme', language:'Language', themeDark:'Dark', themeLight:'Light',
+        hud:'HUD', wrist:'Wrist', wristHand:'Wrist hand', leftHand:'Left', rightHand:'Right', wristOffsetScale:'Wrist offset scale', panelSize:'HUD panel size', offsetX:'X axis', offsetY:'Y axis', offsetZ:'Z axis', theme:'Theme', language:'Language', themeDark:'Dark', themeLight:'Light',
         resetLayout:'Reset',
         langZh:'Chinese', langEn:'English', hardwareSource:'Primary data source', afterburner:'MSI Afterburner', hwinfo:'HWiNFO', interval:'Update interval', apply:'Apply', connect:'Connect SteamVR',
         sensors:'Detected Sensors', sensorHint:'Select exact readings to show in the VR overlay.', filter:'Filter sensors',
@@ -956,7 +984,7 @@ std::wstring WebSettingsWindow::BuildHtml() const
       },
       zh: {
         title:'VR Performance Profiler', overlayHeading:'\u8986\u76D6', offsetHeading:'\u504F\u79FB', appearanceHeading:'\u754C\u9762', dataHeading:'\u6570\u636E',
-        hud:'HUD', wrist:'\u624B\u8155', wristHand:'\u624B\u8155\u4F4D\u7F6E', leftHand:'\u5DE6\u624B', rightHand:'\u53F3\u624B', panelSize:'HUD \u9762\u677F\u5927\u5C0F', offsetX:'X \u8F74', offsetY:'Y \u8F74', offsetZ:'Z \u8F74', theme:'\u4E3B\u9898', language:'\u8BED\u8A00', themeDark:'\u6DF1\u8272', themeLight:'\u6D45\u8272',
+        hud:'HUD', wrist:'\u624B\u8155', wristHand:'\u624B\u8155\u4F4D\u7F6E', leftHand:'\u5DE6\u624B', rightHand:'\u53F3\u624B', wristOffsetScale:'\u624B\u8155\u504F\u79FB\u7CFB\u6570', panelSize:'HUD \u9762\u677F\u5927\u5C0F', offsetX:'X \u8F74', offsetY:'Y \u8F74', offsetZ:'Z \u8F74', theme:'\u4E3B\u9898', language:'\u8BED\u8A00', themeDark:'\u6DF1\u8272', themeLight:'\u6D45\u8272',
         resetLayout:'\u91CD\u7F6E',
         langZh:'\u4E2D\u6587', langEn:'English', hardwareSource:'\u4E3B\u6570\u636E\u6765\u6E90', afterburner:'MSI Afterburner', hwinfo:'HWiNFO', interval:'\u66F4\u65B0\u95F4\u9694', apply:'\u5E94\u7528', connect:'\u8FDE\u63A5 SteamVR',
         sensors:'\u68C0\u6D4B\u5230\u7684\u4F20\u611F\u5668', sensorHint:'\u9009\u62E9\u8981\u663E\u793A\u5728 VR \u8986\u76D6\u4E2D\u7684\u5177\u4F53\u8BFB\u6570\u3002', filter:'\u8FC7\u6EE4\u4F20\u611F\u5668',
@@ -973,9 +1001,13 @@ std::wstring WebSettingsWindow::BuildHtml() const
       return {
         mode: state.config.mode,
         overlayWidthMeters: Number($('panelSize').value),
-        offsetX: Number($('offsetX').value),
-        offsetY: Number($('offsetY').value),
-        offsetZ: Number($('offsetZ').value),
+        hudOffsetX: Number(state.config.hudOffsetX || 0),
+        hudOffsetY: Number(state.config.hudOffsetY || 0),
+        hudOffsetZ: Number(state.config.hudOffsetZ || 0),
+        wristOffsetX: Number(state.config.wristOffsetX || 0),
+        wristOffsetY: Number(state.config.wristOffsetY || 0),
+        wristOffsetZ: Number(state.config.wristOffsetZ || 0),
+        wristOffsetScale: Number(state.config.wristOffsetScale || 0.25),
         wristHand: state.config.wristHand || 'left',
         theme: $('theme').value,
         language: $('language').value,
@@ -999,6 +1031,7 @@ std::wstring WebSettingsWindow::BuildHtml() const
       setText('wristHandLabel', t('wristHand'));
       setText('handLeft', t('leftHand'));
       setText('handRight', t('rightHand'));
+      setText('wristOffsetScaleLabel', t('wristOffsetScale'));
       setText('panelSizeLabel', t('panelSize'));
       setText('offsetHeading', t('offsetHeading'));
       setText('offsetXLabel', t('offsetX'));
@@ -1035,17 +1068,21 @@ std::wstring WebSettingsWindow::BuildHtml() const
       renderStatus();
     }
     function render(){
+      normalizeOffsets();
       $('modeHud').classList.toggle('active', state.config.mode === 'hud');
       $('modeWrist').classList.toggle('active', state.config.mode === 'wrist');
       $('handLeft').classList.toggle('active', (state.config.wristHand || 'left') !== 'right');
       $('handRight').classList.toggle('active', state.config.wristHand === 'right');
+      const wristOffsetScale = clampScale(state.config.wristOffsetScale);
+      $('wristOffsetScale').value = wristOffsetScale.toFixed(2);
+      $('wristOffsetScaleValue').textContent = `${wristOffsetScale.toFixed(2)}x`;
       const panelSize = Math.min(2.5, Math.max(0.5, Number(state.config.overlayWidthMeters || 1.5)));
       $('panelSize').value = panelSize.toFixed(2);
       $('panelSizeValue').textContent = `${panelSize.toFixed(2)} m`;
       const offsets = {
-        offsetX: clampOffset(state.config.offsetX),
-        offsetY: clampOffset(state.config.offsetY),
-        offsetZ: clampOffset(state.config.offsetZ)
+        offsetX: currentOffset('X'),
+        offsetY: currentOffset('Y'),
+        offsetZ: currentOffset('Z')
       };
       for (const [id, value] of Object.entries(offsets)) {
         $(id).value = value.toFixed(2);
@@ -1063,21 +1100,35 @@ std::wstring WebSettingsWindow::BuildHtml() const
       if (!rows.length) { $('table').innerHTML = `<div class="empty">${esc(t('noRows'))}</div>`; return; }
       $('table').innerHTML = `<table><thead><tr><th></th><th>${esc(t('metric'))}</th><th>${esc(t('device'))}</th><th>${esc(t('value'))}</th><th>${esc(t('source'))}</th><th>${esc(t('rawLabel'))}</th></tr></thead><tbody>${rows.map(r => `<tr><td><input type="checkbox" value="${esc(r.key)}" ${selected.has(r.key)?'checked':''}></td><td>${esc(r.categoryName)}</td><td>${esc(r.device||'')}</td><td>${esc(r.value)}</td><td>${esc(r.source||'')}</td><td>${esc(r.label||'')}</td></tr>`).join('')}</tbody></table>`;
     }
+    function normalizeOffsets(){
+      if (state.config.hudOffsetX === undefined) state.config.hudOffsetX = state.config.offsetX ?? 0;
+      if (state.config.hudOffsetY === undefined) state.config.hudOffsetY = state.config.offsetY ?? 0;
+      if (state.config.hudOffsetZ === undefined) state.config.hudOffsetZ = state.config.offsetZ ?? 0;
+      if (state.config.wristOffsetX === undefined) state.config.wristOffsetX = 0;
+      if (state.config.wristOffsetY === undefined) state.config.wristOffsetY = 0;
+      if (state.config.wristOffsetZ === undefined) state.config.wristOffsetZ = 0;
+      if (state.config.wristOffsetScale === undefined) state.config.wristOffsetScale = 0.25;
+    }
+    function offsetKey(axis){ return state.config.mode === 'wrist' ? `wristOffset${axis}` : `hudOffset${axis}`; }
+    function currentOffset(axis){ return clampOffset(state.config[offsetKey(axis)]); }
+    function setCurrentOffset(axis, value){ state.config[offsetKey(axis)] = clampOffset(value); }
     function clampOffset(value){ return Math.min(1, Math.max(-1, Number(value || 0))); }
+    function clampScale(value){ return Math.min(1, Math.max(0.01, Number(value || 0.25))); }
     function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     $('modeHud').onclick=()=>{state.config.mode='hud'; render();};
     $('modeWrist').onclick=()=>{state.config.mode='wrist'; render();};
     $('handLeft').onclick=()=>{state.config.wristHand='left'; state.config.mode='wrist'; render();};
     $('handRight').onclick=()=>{state.config.wristHand='right'; state.config.mode='wrist'; render();};
+    $('wristOffsetScale').oninput=e=>{state.config.wristOffsetScale=clampScale(e.target.value); render();};
     $('panelSize').oninput=e=>{state.config.overlayWidthMeters=Number(e.target.value); render();};
-    $('offsetX').oninput=e=>{state.config.offsetX=Number(e.target.value); render();};
-    $('offsetY').oninput=e=>{state.config.offsetY=Number(e.target.value); render();};
-    $('offsetZ').oninput=e=>{state.config.offsetZ=Number(e.target.value); render();};
+    $('offsetX').oninput=e=>{setCurrentOffset('X', e.target.value); render();};
+    $('offsetY').oninput=e=>{setCurrentOffset('Y', e.target.value); render();};
+    $('offsetZ').oninput=e=>{setCurrentOffset('Z', e.target.value); render();};
     $('resetLayout').onclick=()=>{
       state.config.overlayWidthMeters = 1.5;
-      state.config.offsetX = 0;
-      state.config.offsetY = 0;
-      state.config.offsetZ = 0;
+      setCurrentOffset('X', 0);
+      setCurrentOffset('Y', 0);
+      setCurrentOffset('Z', 0);
       render();
     };
     $('theme').onchange=e=>{state.config.theme=e.target.value; render(); post('previewTheme');};
@@ -1099,9 +1150,13 @@ std::wstring WebSettingsWindow::BuildHtml() const
         if (current) {
           state.config.mode = current.mode;
           state.config.overlayWidthMeters = current.overlayWidthMeters;
-          state.config.offsetX = current.offsetX;
-          state.config.offsetY = current.offsetY;
-          state.config.offsetZ = current.offsetZ;
+          state.config.hudOffsetX = current.hudOffsetX;
+          state.config.hudOffsetY = current.hudOffsetY;
+          state.config.hudOffsetZ = current.hudOffsetZ;
+          state.config.wristOffsetX = current.wristOffsetX;
+          state.config.wristOffsetY = current.wristOffsetY;
+          state.config.wristOffsetZ = current.wristOffsetZ;
+          state.config.wristOffsetScale = current.wristOffsetScale;
           state.config.wristHand = current.wristHand;
           state.config.theme = current.theme;
           state.config.language = current.language;

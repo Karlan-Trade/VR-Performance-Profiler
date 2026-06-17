@@ -40,6 +40,7 @@ struct WristConfig {
     float offsetX = 0.0f;
     float offsetY = 0.0f;
     float offsetZ = 0.0f;
+    float offsetScale = 0.25f;
     float tiltX = 0.0f;
     float tiltY = 0.0f;
     float tiltZ = 0.0f;

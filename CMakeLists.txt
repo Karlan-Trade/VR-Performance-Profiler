@@ -3,7 +3,7 @@ if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
 
-project(VRPerfProfiler VERSION 1.1.0 LANGUAGES CXX)
+project(VRPerfProfiler VERSION 1.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -157,33 +157,6 @@ add_custom_command(TARGET vr_perf_profiler POST_BUILD
         "${OPENVR_BIN_DIR}/openvr_api.dll"
         $<TARGET_FILE_DIR:vr_perf_profiler>
     COMMENT "Copying openvr_api.dll to output directory"
-)
-
-add_executable(vr_perf_vr_init_probe
-    tools/vr_init_probe.cpp
-)
-
-target_include_directories(vr_perf_vr_init_probe PRIVATE
-    ${OPENVR_INCLUDE_DIR}
-)
-
-target_link_libraries(vr_perf_vr_init_probe PRIVATE
-    ${OPENVR_LIB_DIR}/openvr_api.lib
-)
-
-add_custom_command(TARGET vr_perf_vr_init_probe POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${OPENVR_BIN_DIR}/openvr_api.dll"
-        $<TARGET_FILE_DIR:vr_perf_vr_init_probe>
-    COMMENT "Copying openvr_api.dll to SteamVR init probe output directory"
-)
-
-add_dependencies(vr_perf_profiler vr_perf_vr_init_probe)
-add_custom_command(TARGET vr_perf_profiler POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:vr_perf_vr_init_probe>
-        $<TARGET_FILE_DIR:vr_perf_profiler>
-    COMMENT "Copying SteamVR init probe to application output directory"
 )
 
 # ──────────────────────────────────────────────────────────────

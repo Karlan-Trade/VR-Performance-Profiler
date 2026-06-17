@@ -110,13 +110,21 @@ if (-not $SkipBuild) {
         "-DBUILD_TESTS=OFF"
     )
 
-    $cachedOpenVr = Join-Path $repoRoot "build-proxy\_deps\openvr-src"
-    if (Test-Path $cachedOpenVr) {
+    $openVrCacheCandidates = @(
+        (Join-Path $repoRoot "build-vs18\_deps\openvr-src"),
+        (Join-Path $repoRoot "build-proxy\_deps\openvr-src")
+    )
+    $cachedOpenVr = $openVrCacheCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($cachedOpenVr) {
         $configureArgs += "-DFETCHCONTENT_SOURCE_DIR_OPENVR=$cachedOpenVr"
     }
 
-    $cachedJson = Join-Path $repoRoot "build-proxy\_deps\nlohmann_json-src"
-    if (Test-Path $cachedJson) {
+    $jsonCacheCandidates = @(
+        (Join-Path $repoRoot "build-codex-offset\_deps\nlohmann_json-src"),
+        (Join-Path $repoRoot "build-proxy\_deps\nlohmann_json-src")
+    )
+    $cachedJson = $jsonCacheCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($cachedJson) {
         $configureArgs += "-DFETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON=$cachedJson"
     }
 
@@ -130,7 +138,6 @@ if (Test-Path $packageRoot) {
 New-Item -ItemType Directory -Force -Path $appPayload, $installerWork | Out-Null
 
 Copy-RequiredFile -Source (Join-Path $buildPath "vr_perf_profiler.exe") -Destination $appPayload
-Copy-RequiredFile -Source (Join-Path $buildPath "vr_perf_vr_init_probe.exe") -Destination $appPayload
 Copy-RequiredFile -Source (Join-Path $buildPath "openvr_api.dll") -Destination $appPayload
 Copy-RequiredFile -Source (Join-Path $repoRoot "LICENSE") -Destination $appPayload
 Copy-RequiredFile -Source (Join-Path $repoRoot "THIRD_PARTY_NOTICES.md") -Destination $appPayload

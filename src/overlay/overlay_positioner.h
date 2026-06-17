@@ -23,6 +23,8 @@ public:
     // HUD position (angles in degrees, distance in meters)
     void SetHudPosition(float yawDeg, float pitchDeg, float distance);
     void SetOverlayOffset(float x, float y, float z);
+    void SetWristOffset(float x, float y, float z);
+    void SetWristOffsetScale(float scale);
 
     // Wrist settings
     void SetWristHand(bool isLeft);
@@ -46,6 +48,10 @@ private:
     float offsetZ_ = 0.0f;
 
     bool isLeftHand_ = true;
+    float wristOffsetX_ = 0.0f;
+    float wristOffsetY_ = 0.0f;
+    float wristOffsetZ_ = 0.0f;
+    float wristOffsetScale_ = 0.25f;
 };
 
 } // namespace vrperf

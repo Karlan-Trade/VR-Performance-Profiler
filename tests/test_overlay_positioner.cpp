@@ -44,11 +44,25 @@ int main()
 
     positioner.SetOverlayOffset(0.12f, -0.08f, 0.2f);
     auto offsetLeft = positioner.MakeWristTransform();
-    assert(Near(offsetLeft.m[0][3], 0.05f));
-    assert(Near(offsetLeft.m[1][3], -0.13f));
-    assert(Near(offsetLeft.m[2][3], 0.26f));
+    assert(Near(offsetLeft.m[0][3], -0.07f));
+    assert(Near(offsetLeft.m[1][3], -0.05f));
+    assert(Near(offsetLeft.m[2][3], 0.06f));
+
+    positioner.SetWristOffset(0.12f, -0.08f, 0.2f);
+    offsetLeft = positioner.MakeWristTransform();
+    assert(Near(offsetLeft.m[0][3], -0.04f));
+    assert(Near(offsetLeft.m[1][3], -0.07f));
+    assert(Near(offsetLeft.m[2][3], 0.11f));
+
+    positioner.SetWristOffsetScale(0.5f);
+    offsetLeft = positioner.MakeWristTransform();
+    assert(Near(offsetLeft.m[0][3], -0.01f));
+    assert(Near(offsetLeft.m[1][3], -0.09f));
+    assert(Near(offsetLeft.m[2][3], 0.16f));
 
     positioner.SetOverlayOffset(0.0f, 0.0f, 0.0f);
+    positioner.SetWristOffset(0.0f, 0.0f, 0.0f);
+    positioner.SetWristOffsetScale(0.25f);
     positioner.SetWristHand(false);
     auto right = positioner.MakeWristTransform();
     assert(Near(right.m[0][0], 0.0f));
@@ -66,6 +80,18 @@ int main()
 
     positioner.SetOverlayOffset(-0.12f, 0.08f, -0.2f);
     auto offsetRight = positioner.MakeWristTransform();
+    assert(Near(offsetRight.m[0][3], 0.07f));
+    assert(Near(offsetRight.m[1][3], -0.05f));
+    assert(Near(offsetRight.m[2][3], 0.06f));
+
+    positioner.SetWristOffset(-0.12f, 0.08f, -0.2f);
+    offsetRight = positioner.MakeWristTransform();
+    assert(Near(offsetRight.m[0][3], 0.04f));
+    assert(Near(offsetRight.m[1][3], -0.03f));
+    assert(Near(offsetRight.m[2][3], 0.01f));
+
+    positioner.SetWristOffsetScale(2.0f);
+    offsetRight = positioner.MakeWristTransform();
     assert(Near(offsetRight.m[0][3], -0.05f));
     assert(Near(offsetRight.m[1][3], 0.03f));
     assert(Near(offsetRight.m[2][3], -0.14f));

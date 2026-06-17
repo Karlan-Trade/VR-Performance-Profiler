@@ -189,6 +189,7 @@ int main()
         assert(config.wrist.offsetX == 0.0f);
         assert(config.wrist.offsetY == 0.0f);
         assert(config.wrist.offsetZ == 0.0f);
+        assert(config.wrist.offsetScale == 0.25f);
         assert(config.wrist.tiltX == 0.0f);
 
         std::cout << "[PASS] v2 HUD visibility migration passed" << std::endl;
@@ -226,6 +227,7 @@ int main()
         assert(config.wrist.offsetX == 0.0f);
         assert(config.wrist.offsetY == 0.0f);
         assert(config.wrist.offsetZ == 0.0f);
+        assert(config.wrist.offsetScale == 0.25f);
         assert(config.wrist.tiltX == 0.0f);
         assert(config.wrist.tiltY == 0.0f);
         assert(config.wrist.tiltZ == 0.0f);
@@ -315,8 +317,53 @@ int main()
         assert(config.wrist.offsetX == 0.0f);
         assert(config.wrist.offsetY == 0.0f);
         assert(config.wrist.offsetZ == 0.0f);
+        assert(config.wrist.offsetScale == 0.25f);
 
         std::cout << "[PASS] v6 offset baseline migration passed" << std::endl;
+    }
+
+    // Test 10: current wrist offsets persist so the wrist sliders can tune
+    // placement independently from the HUD offset.
+    {
+        nlohmann::json currentConfig = {
+            {"version", 7},
+            {"overlay", {
+                {"offset_x", 0.44f},
+                {"offset_y", -0.55f},
+                {"offset_z", 0.66f}
+            }},
+            {"wrist", {
+                {"offset_x", 0.11f},
+                {"offset_y", -0.22f},
+                {"offset_z", 0.33f},
+                {"offset_scale", 0.5f}
+            }}
+        };
+
+        {
+            std::ofstream file(testPath);
+            file << currentConfig.dump(4);
+        }
+
+        vrperf::Config config;
+        config.Load(testPath);
+
+        assert(config.version == 7);
+        assert(config.overlay.offsetX == 0.44f);
+        assert(config.overlay.offsetY == -0.55f);
+        assert(config.overlay.offsetZ == 0.66f);
+        assert(config.wrist.offsetX == 0.11f);
+        assert(config.wrist.offsetY == -0.22f);
+        assert(config.wrist.offsetZ == 0.33f);
+        assert(config.wrist.offsetScale == 0.5f);
+
+        assert(config.Save(testPath));
+        std::ifstream savedFile(testPath);
+        nlohmann::json savedConfig;
+        savedFile >> savedConfig;
+        assert(savedConfig["wrist"]["offset_scale"] == 0.5f);
+
+        std::cout << "[PASS] current wrist offset persistence passed" << std::endl;
     }
 
     // Cleanup

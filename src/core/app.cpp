@@ -137,20 +137,21 @@ std::string NarrowForLog(const std::wstring& text)
 bool RunSteamVrInitProbe(DWORD timeoutMs)
 {
     const auto exeDir = ExecutableDirectory();
-    const auto probePath = exeDir + L"\\vr_perf_vr_init_probe.exe";
-    if (GetFileAttributesW(probePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        LogInfo("App SteamVR readiness probe missing: " + NarrowForLog(probePath));
+    wchar_t exePathBuffer[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, exePathBuffer, MAX_PATH) == 0) {
+        LogInfo("App SteamVR readiness probe: failed to resolve executable path");
         return false;
     }
+    const std::wstring exePath = exePathBuffer;
 
-    std::wstring commandLine = L"\"" + probePath + L"\"";
+    std::wstring commandLine = L"\"" + exePath + L"\" --steamvr-init-probe";
     STARTUPINFOW startupInfo = {};
     startupInfo.cb = sizeof(startupInfo);
     PROCESS_INFORMATION processInfo = {};
 
     LogInfo("App SteamVR readiness probe: start");
     if (!CreateProcessW(
-            probePath.c_str(),
+            exePath.c_str(),
             commandLine.data(),
             nullptr,
             nullptr,
@@ -324,6 +325,11 @@ bool App::Initialize()
         config_.overlay.offsetX,
         config_.overlay.offsetY,
         config_.overlay.offsetZ);
+    overlayPositioner_.SetWristOffset(
+        config_.wrist.offsetX,
+        config_.wrist.offsetY,
+        config_.wrist.offsetZ);
+    overlayPositioner_.SetWristOffsetScale(config_.wrist.offsetScale);
     overlayPositioner_.SetMode(config_.overlay.mode == "wrist"
         ? OverlayMode::Wrist
         : OverlayMode::HUD);
@@ -569,6 +575,11 @@ void App::ApplyRuntimeConfig()
         config_.overlay.offsetX,
         config_.overlay.offsetY,
         config_.overlay.offsetZ);
+    overlayPositioner_.SetWristOffset(
+        config_.wrist.offsetX,
+        config_.wrist.offsetY,
+        config_.wrist.offsetZ);
+    overlayPositioner_.SetWristOffsetScale(config_.wrist.offsetScale);
     overlayPositioner_.SetMode(config_.overlay.mode == "wrist"
         ? OverlayMode::Wrist
         : OverlayMode::HUD);
