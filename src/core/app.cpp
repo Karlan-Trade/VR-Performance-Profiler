@@ -362,10 +362,6 @@ bool App::Initialize()
 
     UpdateTrayTooltip();
 
-    // Register hotkeys
-    RegisterHotKey(hwnd_, HOTKEY_TOGGLE_VIS, MOD_CONTROL | MOD_SHIFT, 'H');
-    RegisterHotKey(hwnd_, HOTKEY_SWITCH_MODE, MOD_CONTROL | MOD_SHIFT, 'M');
-
     // Start update timer
     SetTimer(hwnd_, timerId_, config_.overlay.updateIntervalMs, nullptr);
     PostMessage(hwnd_, WM_COMMAND, TRAY_MENU_SETTINGS, 0);
@@ -389,8 +385,6 @@ void App::Shutdown()
 
     if (hwnd_) {
         KillTimer(hwnd_, timerId_);
-        UnregisterHotKey(hwnd_, HOTKEY_TOGGLE_VIS);
-        UnregisterHotKey(hwnd_, HOTKEY_SWITCH_MODE);
         trayIcon_.Destroy();
         DestroyWindow(hwnd_);
     }
@@ -470,10 +464,6 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         break;
 
-    case WM_HOTKEY:
-        OnHotkey(static_cast<int>(wParam));
-        return 0;
-
     case WM_STEAMVR_INIT_DONE: {
         if (!connectingSteamVr_.load()) {
             steamVrInitThreadActive_.store(false);
@@ -498,8 +488,6 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_DESTROY:
         if (hwnd == hwnd_) {
             KillTimer(hwnd_, timerId_);
-            UnregisterHotKey(hwnd_, HOTKEY_TOGGLE_VIS);
-            UnregisterHotKey(hwnd_, HOTKEY_SWITCH_MODE);
             trayIcon_.Destroy();
             hwnd_ = nullptr;
         }
@@ -534,19 +522,6 @@ void App::OnTimer()
         if (overlayManager_.IsOverlayVisible()) {
             UpdateOverlay();
         }
-    }
-}
-
-void App::OnHotkey(int id)
-{
-    switch (id) {
-    case HOTKEY_TOGGLE_VIS:
-        overlayManager_.ToggleVisibility();
-        break;
-    case HOTKEY_SWITCH_MODE:
-        overlayPositioner_.ToggleMode();
-        ApplyOverlayTransform();
-        break;
     }
 }
 

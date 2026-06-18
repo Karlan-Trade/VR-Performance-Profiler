@@ -106,7 +106,6 @@ int main()
         assert(j.contains("wrist"));
         assert(j.contains("metrics"));
         assert(j.contains("appearance"));
-        assert(j.contains("hotkeys"));
         assert(j.contains("data"));
         assert(j.contains("general"));
         assert(j["overlay"]["width_meters"] == 1.25f);

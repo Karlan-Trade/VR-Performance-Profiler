@@ -73,11 +73,6 @@ VRPerformanceProfiler-<version>-portable.zip
 - `Settings...`：打开设置界面
 - `Exit`：退出程序
 
-## 快捷键
-
-- `Ctrl+Shift+H`：显示/隐藏覆盖层
-- `Ctrl+Shift+M`：切换 HUD/手腕模式
-
 ## 覆盖层显示
 
 - HUD 模式固定在头显视野中，默认距离为 `1.0 m`

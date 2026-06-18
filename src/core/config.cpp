@@ -122,7 +122,6 @@ void Config::SetDefaults()
     };
 
     appearance = AppearanceConfig{};
-    hotkeys = HotkeyConfig{};
     data = DataConfig{};
     general = GeneralConfig{};
 }
@@ -195,14 +194,6 @@ void Config::FromJson(const nlohmann::json& j)
         appearance.fontSize     = a.value("font_size", appearance.fontSize);
         appearance.textureWidth = a.value("texture_width", appearance.textureWidth);
         appearance.textureHeight = a.value("texture_height", appearance.textureHeight);
-    }
-
-    // Hotkeys
-    if (j.contains("hotkeys")) {
-        auto& hk = j["hotkeys"];
-        hotkeys.toggleVisibility = hk.value("toggle_visibility", hotkeys.toggleVisibility);
-        hotkeys.switchMode       = hk.value("switch_mode", hotkeys.switchMode);
-        hotkeys.cycleMetrics     = hk.value("cycle_metrics", hotkeys.cycleMetrics);
     }
 
     // Data source
@@ -347,13 +338,6 @@ nlohmann::json Config::ToJson() const
         {"font_size", appearance.fontSize},
         {"texture_width", appearance.textureWidth},
         {"texture_height", appearance.textureHeight}
-    };
-
-    // Hotkeys
-    j["hotkeys"] = {
-        {"toggle_visibility", hotkeys.toggleVisibility},
-        {"switch_mode", hotkeys.switchMode},
-        {"cycle_metrics", hotkeys.cycleMetrics}
     };
 
     // Data source

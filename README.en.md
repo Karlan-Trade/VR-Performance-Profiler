@@ -110,11 +110,6 @@ HUD mode defaults to `1.0 m` in front of the headset. The Web settings window
 includes a HUD panel size slider from `0.50 m` to `2.50 m`. Wrist mode defaults
 to a compact `0.75 m` overlay width.
 
-### Hotkeys
-
-- `Ctrl+Shift+H` — Toggle overlay visibility
-- `Ctrl+Shift+M` — Switch between HUD and Wrist mode
-
 Tray menu:
 
 - `Connect SteamVR Overlay` — Initialize the OpenVR overlay on demand

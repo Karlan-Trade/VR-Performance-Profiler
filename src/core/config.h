@@ -53,12 +53,6 @@ struct AppearanceConfig {
     int textureHeight = 512;
 };
 
-struct HotkeyConfig {
-    std::string toggleVisibility = "ctrl+shift+h";
-    std::string switchMode = "ctrl+shift+m";
-    std::string cycleMetrics = "ctrl+shift+n";
-};
-
 struct DataConfig {
     std::string hardwareSource = "afterburner"; // "afterburner" or "hwinfo"
 };
@@ -78,7 +72,6 @@ public:
     WristConfig wrist;
     std::vector<MetricConfig> metrics;
     AppearanceConfig appearance;
-    HotkeyConfig hotkeys;
     DataConfig data;
     GeneralConfig general;
 

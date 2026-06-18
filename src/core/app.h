@@ -32,7 +32,6 @@ private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     void OnTimer();
-    void OnHotkey(int id);
 
     // Update cycle
     std::vector<SensorReading> CollectSensorReadings();
@@ -59,10 +58,6 @@ private:
     UINT_PTR timerId_ = 1;
     static constexpr UINT WM_TRAYICON = WM_APP + 1;
     static constexpr UINT WM_STEAMVR_INIT_DONE = WM_APP + 2;
-
-    // Hotkey IDs
-    static constexpr int HOTKEY_TOGGLE_VIS = 1;
-    static constexpr int HOTKEY_SWITCH_MODE = 2;
 
     // Subsystems
     Config config_;
