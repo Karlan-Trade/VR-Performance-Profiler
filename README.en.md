@@ -68,9 +68,9 @@ under the current user. SteamVR must still be installed separately.
 The installer is generated as a standard Windows Installer MSI by WiX Toolset 4.
 `wix.exe` must be in PATH or installed at `.tools\wix\wix.exe`. Use `-SkipMsi`
 to build only the portable ZIP. The MSI keeps the custom install directory UI,
-but app files are copied by an embedded custom action instead of the Windows
-Installer `File` table to avoid `Config.Msi` permission failures on custom
-install drives.
+but app files are copied by an embedded native custom action instead of the
+Windows Installer `File` table to avoid `Config.Msi` permission failures on
+custom install drives.
 
 ### Running
 

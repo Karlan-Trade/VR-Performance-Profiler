@@ -1,5 +1,10 @@
 # 更新记录
 
+## [1.2.1] - 2026-06-18
+
+- 将 MSI 内嵌的 C# EXE 载荷 helper 改为原生 DLL 自定义动作，降低 Windows Defender 将安装包误判为投放器/dropper 的概率。
+- 应用文件仍不进入 Windows Installer `File` 表，而是作为 MSI `Binary` 流由自定义动作复制到用户选择目录，继续保留自定义安装位置与 `Config.Msi` 权限问题规避。
+
 ## [1.2.0] - 2026-06-18
 
 - 应用文件改由 MSI 内嵌自定义动作复制和按 manifest 卸载，不再进入 Windows Installer `File` 表，避免自定义盘符卸载时触发 `Config.Msi` 回滚目录权限错误。

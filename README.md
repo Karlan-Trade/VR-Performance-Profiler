@@ -47,7 +47,7 @@ VRPerformanceProfiler-<version>-Setup.msi
 - 创建开始菜单快捷方式和标准卸载项
 
 安装器由 WiX Toolset 生成标准 Windows Installer MSI，不再发布压缩自解压 EXE 安装器。
-为避免部分自定义安装盘符上 `Config.Msi` 回滚目录权限异常，MSI 仅负责产品注册与向导，应用文件由安装包内的自定义动作复制和按 manifest 卸载。
+为避免部分自定义安装盘符上 `Config.Msi` 回滚目录权限异常，MSI 仅负责产品注册与向导，应用文件由安装包内的原生自定义动作复制和按 manifest 卸载。
 
 ## 便携版
 
@@ -123,7 +123,7 @@ dist\
 ```
 
 打包脚本会生成安装器和便携 ZIP。安装器不会打包 SteamVR。
-安装器由 WiX Toolset 4 生成；构建 MSI 时需要 `wix.exe` 在 PATH 中，或安装到仓库本地 `.tools\wix\wix.exe`。若只需要便携 ZIP，可添加 `-SkipMsi`。MSI 会保留自定义安装位置选择，但应用文件不进入 Windows Installer `File` 表，以避开部分自定义盘符上的 `Config.Msi` 权限问题。
+安装器由 WiX Toolset 4 生成；构建 MSI 时需要 `wix.exe` 在 PATH 中，或安装到仓库本地 `.tools\wix\wix.exe`。若只需要便携 ZIP，可添加 `-SkipMsi`。MSI 会保留自定义安装位置选择，但应用文件不进入 Windows Installer `File` 表，而是由原生 DLL 自定义动作安装，以避开部分自定义盘符上的 `Config.Msi` 权限问题。
 
 ## 反作弊边界
 
