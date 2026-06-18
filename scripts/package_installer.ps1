@@ -47,6 +47,29 @@ function Find-WixToolset {
     return $null
 }
 
+function Find-CSharpCompiler {
+    $command = Get-Command "csc.exe" -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $candidates = @(
+        "D:\VS\MSBuild\Current\Bin\Roslyn\csc.exe",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\Roslyn\csc.exe",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\Roslyn\csc.exe",
+        "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
 function Invoke-Native {
     param(
         [string]$FilePath,
@@ -75,6 +98,20 @@ function Copy-RequiredFile {
 function Escape-WixAttribute {
     param([string]$Value)
     return $Value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace('"', "&quot;").Replace("'", "&apos;")
+}
+
+function New-DeterministicGuid {
+    param([string]$Value)
+
+    $md5 = [System.Security.Cryptography.MD5]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value.ToLowerInvariant())
+        $hash = $md5.ComputeHash($bytes)
+        return (New-Object -TypeName System.Guid -ArgumentList (,$hash)).ToString().ToUpperInvariant()
+    }
+    finally {
+        $md5.Dispose()
+    }
 }
 
 function ConvertTo-LicenseRtf {
@@ -162,25 +199,32 @@ if (-not $SkipInstallerExe -and -not $SkipMsi) {
         throw "WiX Toolset wix.exe was not found. Install it with: dotnet tool install --tool-path .\.tools\wix wix --version 4.0.5. Portable package was still created: $portableZip"
     }
 
+    $csc = Find-CSharpCompiler
+    if (-not $csc) {
+        throw "C# compiler csc.exe was not found. Install Visual Studio Build Tools or run from a developer shell. Portable package was still created: $portableZip"
+    }
+
     $licenseRtf = Join-Path $installerWork "License.rtf"
     Set-Content -Path $licenseRtf -Value (ConvertTo-LicenseRtf (Get-Content -Path (Join-Path $repoRoot "LICENSE") -Raw)) -Encoding ASCII
 
-    $componentBuilder = [System.Text.StringBuilder]::new()
-    $fileIndex = 1
-    Get-ChildItem -Path $appPayload -File -Recurse |
-        Sort-Object FullName |
-        ForEach-Object {
-            $source = Escape-WixAttribute $_.FullName
-            [void]$componentBuilder.AppendLine("    <Component Id=""cmp$fileIndex"" Directory=""INSTALLFOLDER"" Guid=""*"">")
-            [void]$componentBuilder.AppendLine("      <File Id=""fil$fileIndex"" Source=""$source"" KeyPath=""yes"" />")
-            [void]$componentBuilder.AppendLine("    </Component>")
-            $fileIndex++
-        }
+    $payloadAction = Join-Path $installerWork "VRPerfPayloadAction.exe"
+    Invoke-Native -FilePath $csc -Arguments @(
+        "/nologo",
+        "/target:winexe",
+        "/platform:x64",
+        "/optimize+",
+        "/out:$payloadAction",
+        "/resource:$portableZip,VRPerfPayloadZip",
+        "/reference:System.IO.Compression.dll",
+        "/reference:System.IO.Compression.FileSystem.dll",
+        (Join-Path $repoRoot "scripts\MsiPayloadAction.cs")
+    )
 
     $wixSource = Join-Path $installerWork "VRPerformanceProfiler.wxs"
     $escapedLicenseRtf = Escape-WixAttribute $licenseRtf
     $escapedIcon = Escape-WixAttribute (Join-Path $repoRoot "resources\app.ico")
-    $components = $componentBuilder.ToString().TrimEnd()
+    $escapedPayloadAction = Escape-WixAttribute $payloadAction
+    $registrationGuid = New-DeterministicGuid "VRPerformanceProfiler:ProductRegistration"
 
     $wixXml = @"
 <?xml version="1.0" encoding="utf-8"?>
@@ -191,16 +235,33 @@ if (-not $SkipInstallerExe -and -not $SkipMsi) {
            Version="$version"
            UpgradeCode="7E7F19F2-8AC4-4B64-B4B4-7D9E9C1D989B"
            Scope="perUser">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of VR Performance Profiler is already installed." />
+    <MajorUpgrade Schedule="afterInstallInitialize"
+                  DowngradeErrorMessage="A newer version of VR Performance Profiler is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="medium" />
     <Property Id="DISABLEROLLBACK" Value="1" />
     <Icon Id="AppIcon.ico" SourceFile="$escapedIcon" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <Property Id="ARPNOREPAIR" Value="1" />
     <ui:WixUI Id="WixUI_InstallDir" />
     <WixVariable Id="WixUILicenseRtf" Value="$escapedLicenseRtf" />
+    <Binary Id="PayloadActionExe" SourceFile="$escapedPayloadAction" />
+    <CustomAction Id="InstallPayload"
+                  BinaryRef="PayloadActionExe"
+                  ExeCommand="install &quot;[INSTALLFOLDER].&quot; &quot;[ProductVersion]&quot;"
+                  Execute="immediate"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="UninstallPayload"
+                  BinaryRef="PayloadActionExe"
+                  ExeCommand="uninstall &quot;[INSTALLFOLDER].&quot;"
+                  Execute="immediate"
+                  Return="check"
+                  Impersonate="yes" />
     <InstallExecuteSequence>
       <DisableRollback Before="InstallInitialize" />
+      <Custom Action="InstallPayload" After="InstallInitialize" Condition="NOT Installed" />
+      <Custom Action="UninstallPayload" Before="RemoveFolders" Condition="REMOVE=&quot;ALL&quot;" />
     </InstallExecuteSequence>
 
     <StandardDirectory Id="LocalAppDataFolder">
@@ -209,24 +270,15 @@ if (-not $SkipInstallerExe -and -not $SkipMsi) {
       </Directory>
     </StandardDirectory>
 
-    <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ApplicationProgramsFolder" Name="VR Performance Profiler" />
-    </StandardDirectory>
-
     <ComponentGroup Id="ProductComponents">
-$components
-      <Component Id="ApplicationShortcut" Directory="ApplicationProgramsFolder" Guid="*">
-        <Shortcut Id="ApplicationStartMenuShortcut"
-                  Name="VR Performance Profiler"
-                  Description="VR Performance Profiler"
-                  Target="[INSTALLFOLDER]vr_perf_profiler.exe"
-                  WorkingDirectory="INSTALLFOLDER" />
-        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+      <Component Id="ProductRegistration" Directory="INSTALLFOLDER" Guid="{$registrationGuid}">
+        <RemoveFolder Id="InstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+        <RemoveFolder Id="LocalProgramsFolder" Directory="LocalProgramsFolder" On="uninstall" />
         <RegistryValue Root="HKCU"
                        Key="Software\VR Performance Profiler"
-                       Name="installed"
-                       Type="integer"
-                       Value="1"
+                       Name="msiProduct"
+                       Type="string"
+                       Value="[ProductCode]"
                        KeyPath="yes" />
       </Component>
     </ComponentGroup>
